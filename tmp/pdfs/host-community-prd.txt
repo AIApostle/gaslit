@@ -1,0 +1,1804 @@
+                PRODUCT REQUIREMENTS DOCUMENT
+
+        Host Community Complaint &
+         Case Management Platform
+      A community-facing grievance and case-tracking platform with
+   SwiftAgent-powered CRM pipeline automation and status notifications
+
+
+
+
+                                   Prepared by
+                            Tomii, Pecuilar and Saviour
+
+
+                           Document status: Draft PRD
+                                   Version: 1.0
+                        Last updated: September 11, 2026
+
+
+
+
+Product domain: Host Community Relations / Grievance Management / Case Management
+    PRODUCT REQUIREMENTS DOCUMENT                                                          Host Community Case Management
+
+
+
+
+     Table of Contents
+•
+      1. Product Overview
+
+•
+      2. Problem Statement
+
+•
+      3. Solution
+
+•
+      4. Product Vision, Objectives & Principles
+
+•
+      5. Market & Business Model
+
+•
+      6. Target Users & Personas
+
+•
+      7. User Journey & Case Lifecycle
+
+•
+      8. MVP Goals & Scope
+
+•
+      9. Functional Requirements
+
+•
+      10. SwiftAgent Integration
+
+•
+      11. Notification & Communication Model
+
+•
+      12. Data Model & Case Record
+
+•
+      13. Dashboard & Reporting
+
+•
+      14. Non-Functional Requirements
+
+•
+      15. Technical Architecture & Tech Stack
+
+•
+      16. Security, Privacy & Access Control
+
+•
+      17. Success Metrics & KPIs
+
+•
+      18. Risks, Dependencies & Open Questions
+
+•
+      19. Roadmap & Milestones
+
+•
+      20. Out of Scope & Future Scope
+
+•
+      21. Acceptance Criteria
+
+•
+      22. Conclusion
+
+
+     This document follows the organization and level of detail of the supplied Spill & Emissions Compliance App PRD
+     template, while adapting the product entirely to the host-community complaint and case-management use case. The
+
+
+
+
+                                                               2
+PRODUCT REQUIREMENTS DOCUMENT                                                            Host Community Case Management
+
+
+
+ supplied template's own table of contents follows the same product-overview, problem, solution, market, users, MVP,
+ integration, functional, technical, risk and roadmap structure. ■filecite■turn0file0■L19-L36■
+
+
+
+
+                                                            3
+    PRODUCT REQUIREMENTS DOCUMENT                                                            Host Community Case Management
+
+
+
+
+     1. Product Overview
+     The Host Community Complaint & Case Management Platform is a case-management system for oil &
+
+     gas operators and community-relations teams that need a reliable way to receive, track, investigate,
+
+     resolve, and communicate updates about complaints raised by host-community members. The central
+
+     problem is not simply collecting complaints; it is preventing complaints from disappearing into phone
+
+     calls, letters, WhatsApp conversations, informal notes, or disconnected spreadsheets.
+
+     A community member files a complaint—such as an environmental spill concern, compensation dispute,
+
+     pipeline issue, access concern, or another community-related grievance. The platform converts that
+
+     complaint into a structured case with a unique reference number, category, location, description,
+
+     timestamps, responsible officer, current stage, SLA information, and communication history.
+
+     The case moves through Reported → Under Investigation → Response Issued → Resolved, with
+
+     Escalated available as a branch where an SLA is at risk or the case requires management intervention. The
+
+     case-management application remains the source of truth for the case itself, while SwiftAgent's
+
+     CRM/pipeline capabilities and Zapier automation handle contact synchronization, pipeline-stage updates,
+
+     and automated status communications.
+
+     In one line: A host-community grievance platform that turns a complaint into a traceable case, keeps
+
+     staff accountable through workflow and SLA visibility, and keeps the complainant informed
+
+     automatically as the case progresses.
+
+     1.1 Product boundaries
+•
+      The app is the system of record for case-management data, workflow state, investigation notes, evidence,
+
+      response records, and audit history.
+
+•
+      SwiftAgent is an integration/automation layer for contact and pipeline synchronization and automated
+
+      status communications, subject to verification of the actual Zapier-exposed triggers and actions.
+
+•
+      Zapier is the workflow bridge between the case backend and SwiftAgent.
+
+•
+      The MVP does not claim automatic submission to a government grievance or regulatory system.
+
+•
+      Low-connectivity and low-literacy conditions are treated as product requirements rather than edge cases.
+
+     The supplied template explicitly treated community-facing grievance reporting as a separate problem space; this PRD
+     intentionally makes that problem the primary product. ■filecite■turn0file0■L326-L330■
+
+
+
+
+                                                                4
+PRODUCT REQUIREMENTS DOCUMENT                                                         Host Community Case Management
+
+
+
+
+ 2. Problem Statement
+ Host communities may raise complaints through multiple informal channels: phone calls, letters, visits to
+
+ an office, SMS, WhatsApp messages, community meetings, or conversations with staff. These channels do
+
+ not automatically create a single, accountable case record. After the initial complaint, the complainant can
+
+ be left without a clear reference number, responsible officer, expected response timeline, or reliable way to
+
+ know what is happening.
+
+ This creates a trust and operational problem. A complaint may be known by one employee but invisible to
+
+ management; a response may be drafted but not communicated; a case may remain unresolved beyond an
+
+ internal SLA; and historical information may be difficult to reconstruct when management asks what
+
+ happened.
+
+
+ 2.1 Core pain points
+
+  Problem                        Current effect                           Product implication
+
+  Informal intake                Complaints arrive through disconnected   Provide a single structured case-creation
+                                 channels and inconsistent formats.       workflow while supporting practical
+                                                                          low-tech channels.
+
+  No persistent case identity    Complainants may not know how to         Generate a unique case/reference number
+                                 reference or follow up on a complaint.   immediately.
+
+  Silence after reporting        The complainant cannot easily tell       Automate status notifications at defined
+                                 whether the complaint was received,      lifecycle changes.
+                                 assigned, investigated, or resolved.
+
+  Poor internal visibility       Management cannot quickly see all        Provide a role-based dashboard with
+                                 open cases, ageing, SLA risk, or         stage, age, owner and SLA status.
+                                 escalations.
+
+  Manual follow-up               Staff repeatedly answer 'what is         Expose status through a reference
+                                 happening with my complaint?'            number and automated updates.
+                                 questions.
+
+  Disconnected communication     CRM contacts and case records may        Use webhooks and Zapier to synchronize
+                                 not stay synchronized.                   approved case-stage events with
+                                                                          SwiftAgent.
+
+  Weak audit trail               It can be difficult to establish who     Store timestamped events, status history
+                                 changed a case and when.                 and user actions.
+
+
+
+
+                                                           5
+PRODUCT REQUIREMENTS DOCUMENT                                               Host Community Case Management
+
+
+
+ 2.2 Problem statement
+  Community members need a transparent and accessible way to report and follow up on grievances,
+  while community-relations teams need a single source of truth for case ownership, investigation
+  progress, SLA risk and resolution history. Without this, complaints can become fragmented, delayed
+  and difficult to audit, weakening both operational efficiency and community trust.
+
+
+
+
+                                                   6
+PRODUCT REQUIREMENTS DOCUMENT                                                                        Host Community Case Management
+
+
+
+
+ 3. Solution
+ The solution is a centralized complaint-to-resolution workflow. A complaint enters through a supported
+
+ intake channel, is validated and converted into a structured case, assigned to a case officer, tracked through
+
+ defined stages, and communicated back to the complainant whenever meaningful progress occurs.
+
+
+ 3.1 Intake
+ A community member can submit what happened, where it happened, when it happened, and how they can
+
+ be contacted. The interface should use plain language and avoid requiring the complainant to understand
+
+ internal company terminology. Where connectivity and device limitations make a web form impractical,
+
+ the product can accept the same core information through SMS or WhatsApp once the selected
+
+ gateway/channel is implemented.
+
+
+ 3.2 Case creation
+ The backend creates a structured case containing a unique case ID/reference, category, description,
+
+ location, reported date/time, complainant/contact information, source channel, assigned officer, current
+
+ stage, timestamps, SLA target, and communication history. The person is also created or updated as a
+
+ contact in SwiftAgent and associated with the case through the integration.
+
+
+ 3.3 Pipeline tracking
+ Every case follows a controlled lifecycle. The case officer changes the stage in the case-management
+
+ application. The application records the change first; the integration then emits a webhook event. This
+
+ preserves the principle that the app is the source of truth rather than allowing a CRM automation to
+
+ become the authoritative case database.
+
+
+
+
+           1. REPORTED                              2. UNDER                           3. RESPONSE                4. RESOLVED
+                                                 INVESTIGATION                            ISSUED
+
+
+
+
+                                                                                ESCALATED
+
+
+
+
+    Escalation is triggered when an SLA threshold is at risk or exceeded.
+
+
+
+
+                                                                            7
+PRODUCT REQUIREMENTS DOCUMENT                                                  Host Community Case Management
+
+
+
+ 3.4 Automated communication
+ On a valid stage transition, the backend sends a webhook to Zapier. Zapier performs the configured
+
+ SwiftAgent action(s), such as updating the contact's pipeline stage and initiating the appropriate campaign
+
+ or notification workflow. Exact SwiftAgent capabilities must be verified before production
+
+ implementation.
+
+
+ 3.5 Internal management
+ Case officers receive a working queue. Managers receive a higher-level view of case volume, ageing,
+
+ unresolved cases, SLA risk, escalations and resolution patterns. This transforms grievance handling from
+
+ an informal follow-up process into an observable operational workflow.
+
+
+
+
+                                                      8
+    PRODUCT REQUIREMENTS DOCUMENT                                                          Host Community Case Management
+
+
+
+
+     4. Product Vision, Objectives & Principles
+     4.1 Product vision
+     To create a trusted, accessible and accountable digital channel through which host-community complaints
+
+     become traceable cases, receive timely attention, and generate clear communication from report to
+
+     resolution.
+
+
+     4.2 Objectives
+•
+      Ensure every accepted complaint receives a unique reference and a persistent case record.
+
+•
+      Reduce the information gap between the complainant and the organization after a complaint is submitted.
+
+•
+      Give case officers a clear queue of work, ownership and next actions.
+
+•
+      Give managers real-time visibility into open cases, ageing, SLA risk and escalations.
+
+•
+      Automate repetitive status communications without removing human judgment from investigation or
+
+      resolution.
+
+•
+      Maintain a reliable audit history of case progression and important actions.
+
+•
+      Support practical intake options for communities with varying connectivity, smartphone access and
+
+      digital literacy.
+
+
+     4.3 Product principles
+
+      Principle                                               Meaning in the product
+
+      Case first                                              Every complaint should become a trackable case, not just a
+                                                              message or contact record.
+
+      Human accountability                                    Automation can notify and synchronize, but a responsible
+                                                              officer remains accountable for investigation and resolution.
+
+      Low friction                                            The complainant should not need to understand CRM
+                                                              pipelines, internal departments or regulatory terminology.
+
+      Single source of truth                                  The case backend owns case state; external automation
+                                                              systems mirror or act on approved events.
+
+      Explainable status                                      A complainant should be able to understand what stage their
+                                                              case is in.
+
+      Audit by design                                         Important actions and stage transitions are recorded rather
+                                                              than silently overwritten.
+
+      Connectivity-aware                                      The product should degrade gracefully where network quality
+                                                              is inconsistent.
+
+
+
+                                                          9
+    PRODUCT REQUIREMENTS DOCUMENT                                                          Host Community Case Management
+
+
+
+
+     5. Market & Business Model
+     The product is best positioned as a B2B SaaS case-management platform sold to organizations operating
+
+     in or around host communities, particularly oil & gas operators, indigenous producers, energy companies,
+
+     and organizations with dedicated community-relations or grievance-handling teams. It is not a consumer
+
+     marketplace and is not a two-sided marketplace in the traditional sense.
+
+
+     5.1 Marketplace model
+     The 'marketplace' component is better understood as an enterprise service model rather than a transaction
+
+     marketplace. The paying organization provides the case-management service to its host communities.
+
+     Community members are users or beneficiaries of the service, but they are not the paying side of a
+
+     two-sided market.
+
+
+      Model element                                           Description
+
+      Buyer                                                   Oil & gas operator, energy company, community-relations
+                                                              department, or other organization responsible for grievance
+                                                              handling.
+
+      Operational users                                       Case officers, community-relations leads, managers and
+                                                              administrators.
+
+      End users                                               Host-community members submitting and tracking
+                                                              complaints.
+
+      Core value                                              Accountability, visibility, faster follow-up, structured case
+                                                              records and automated communication.
+
+      Revenue basis                                           Potential organization/site subscription,
+                                                              implementation/onboarding, and optional usage-based
+                                                              communication costs.
+
+      Expansion path                                          Additional sites, departments, case categories, analytics,
+                                                              multilingual channels and deeper integrations.
+
+
+     5.2 Customer segments
+•
+      Large oil & gas operators with formal community-relations functions.
+
+•
+      Indigenous producers and marginal-field operators seeking stronger grievance-management processes.
+
+•
+      Oilfield service and contracting organizations that receive or manage community complaints around
+
+      operational activities.
+
+•
+      Energy and infrastructure organizations with recurring host-community engagement.
+
+
+
+
+                                                         10
+    PRODUCT REQUIREMENTS DOCUMENT                                                  Host Community Case Management
+
+
+•
+      Organizations managing multiple operating locations and needing a centralized management view.
+
+
+     5.3 Commercial positioning
+     The wedge should be narrow and practical: make community complaints traceable and keep
+
+     complainants informed. The product should not initially compete as a full enterprise CRM or full HSE
+
+     suite. Its differentiation is the combination of case management, community-facing intake, SLA visibility,
+
+     and CRM-driven automated status communication.
+
+
+
+
+                                                         11
+    PRODUCT REQUIREMENTS DOCUMENT                                                             Host Community Case Management
+
+
+
+
+     6. Target Users & Personas
+      Persona                   Role                              Needs                           Key product actions
+
+      Community Member          Person raising a complaint        Easy reporting, reference       Submit complaint; receive
+                                                                  number, understandable          reference; check status;
+                                                                  status, confirmation and        receive notifications.
+                                                                  updates.
+
+      Case Officer              Investigates and manages          Complete case record,           Review; assign; investigate;
+                                cases                             ownership, evidence, notes,     update stage; add
+                                                                  SLA visibility and controlled   notes/evidence; draft
+                                                                  stage changes.                  response; resolve.
+
+      Manager / Community       Oversees portfolio                Dashboard visibility, ageing,   Monitor; reassign; escalate;
+      Relations Lead                                              escalation and performance      review SLA risk; inspect
+                                                                  trends.                         history; export reports.
+
+      Administrator             Manages platform                  Users, roles, categories, SLA   Configure; manage access;
+                                configuration                     rules, integrations and         maintain integration settings;
+                                                                  notification templates.         audit system health.
+
+
+     6.1 Community member experience
+•
+     Use simple language and minimal required fields.
+
+•
+     Receive a confirmation and case reference after successful submission.
+
+•
+     See a clear explanation of the current stage rather than internal workflow jargon.
+
+•
+     Receive updates when the case changes stage.
+
+•
+     Follow up using the reference number and approved contact channel.
+
+
+     6.2 Case officer experience
+•
+     See newly reported cases immediately.
+
+•
+     Filter and sort by category, location, age, owner, stage and SLA risk.
+
+•
+     Open a complete case timeline.
+
+•
+     Record investigation activities and supporting evidence.
+
+•
+     Change stage only through permitted workflow transitions.
+
+•
+     Draft or record a response before moving a case to the appropriate next stage.
+
+•
+     Resolve a case with a resolution summary and final timestamp.
+
+
+
+
+                                                             12
+PRODUCT REQUIREMENTS DOCUMENT                                                              Host Community Case Management
+
+
+
+
+ 7. User Journey & Case Lifecycle
+ The primary journey is designed to eliminate the gap between 'complaint received' and 'complaint visibly
+
+ progressing.' The system should make each transition explicit and observable.
+
+ 1   Submit: The community member submits a complaint through the available intake channel.
+
+ 2   Validate: The system checks that minimum required information and contact details are present.
+
+ 3   Create: The backend creates the case, assigns a unique reference and stores the initial timestamp.
+
+ 4   Synchronize: The system creates or updates the complainant contact in SwiftAgent and records the
+
+     integration relationship.
+
+ 5   Notify: A receipt/confirmation event is sent through the configured automation flow.
+
+ 6   Assign: A case officer is assigned according to the organization's workflow.
+
+ 7   Investigate: The officer gathers facts, records actions, attaches evidence and updates progress.
+
+ 8   Respond: The organization prepares and issues an appropriate response.
+
+ 9   Resolve: The case is marked resolved with a resolution summary and closure timestamp.
+
+ 10 Follow-up: The complainant can reference the case after closure, subject to retention and access rules.
+
+ 7.1 Stage definitions
+
+  Stage                      Definition                           Typical owner               Key output
+
+  Reported                   Complaint accepted and case          System / intake team        Case reference + receipt.
+                             created.
+
+  Under Investigation        Case has been assigned and           Case Officer                Investigation record,
+                             investigation is active.                                         findings/evidence.
+
+  Response Issued            A response has been                  Case Officer / Lead         Response record +
+                             prepared and communicated                                        communication timestamp.
+                             according to the
+                             organization's process.
+
+  Resolved                   Required action has been             Case Officer / Manager      Resolution summary +
+                             completed and the case is                                        closure record.
+                             formally closed.
+
+  Escalated                  Branch state for cases               Manager / Lead              Escalation reason + new
+                             requiring management                                             owner/action.
+                             intervention because of SLA
+                             risk, complexity, sensitivity
+                             or unresolved issues.
+
+
+
+
+                                                             13
+PRODUCT REQUIREMENTS DOCUMENT                                                  Host Community Case Management
+
+
+
+ 7.2 SLA concept
+ Each category can have a configurable target response/resolution period. The MVP should track elapsed
+
+ time and flag risk before the target is exceeded. Exact SLA durations should be configurable by the
+
+ customer rather than hard-coded into the product unless a verified policy requires otherwise.
+
+
+
+
+                                                     14
+    PRODUCT REQUIREMENTS DOCUMENT                                                         Host Community Case Management
+
+
+
+
+     8. MVP Goals & Scope
+     8.1 MVP goals
+•
+     Create a reliable end-to-end complaint-to-resolution workflow.
+
+•
+     Provide a simple community-facing intake experience.
+
+•
+     Generate a unique case reference for every accepted complaint.
+
+•
+     Give officers and managers a single dashboard for case visibility.
+
+•
+     Track stage, ownership, age and SLA risk.
+
+•
+     Send automated status updates through the SwiftAgent/Zapier integration.
+
+•
+     Maintain an auditable history of important case changes.
+
+•
+     Generate a structured case summary for internal record-keeping and export.
+
+
+     8.2 In-scope MVP
+
+      Area                                                   MVP scope
+
+      Intake                                                 Responsive web/PWA complaint form; core fields;
+                                                             confirmation; reference number.
+
+      Case management                                        Create, view, update, assign, categorize and resolve cases.
+
+      Workflow                                               Reported, Under Investigation, Response Issued, Resolved;
+                                                             Escalated branch.
+
+      Dashboard                                              Open cases, filters, stage counts, ageing, SLA risk,
+                                                             escalations.
+
+      Notifications                                          Stage-change events passed to Zapier for configured
+                                                             SwiftAgent campaigns.
+
+      CRM sync                                               Create/update contact and associate contact with case
+                                                             metadata, subject to verified integration capabilities.
+
+      Audit trail                                            Stage changes, assignments, key edits, notification events and
+                                                             timestamps.
+
+      Reporting                                              Downloadable structured case summary/export.
+
+      Access control                                         Community member access to own case status; staff
+                                                             role-based access.
+
+      Integration monitoring                                 Record webhook attempts, success/failure and retry status.
+
+
+
+
+                                                        15
+PRODUCT REQUIREMENTS DOCUMENT                                                   Host Community Case Management
+
+
+
+ 8.3 MVP definition of done
+ A pilot customer should be able to receive a complaint, create a case, assign it, move it through the defined
+
+ stages, see the complete history, trigger the corresponding automated communication, and close/export the
+
+ case without relying on an external spreadsheet as the primary tracking system.
+
+
+
+
+                                                      16
+PRODUCT REQUIREMENTS DOCUMENT                                                      Host Community Case Management
+
+
+
+
+ 9. Functional Requirements
+  ID                            Requirement                                 Priority
+
+  FR1                           System shall allow a community              Must
+                                member to submit a complaint through
+                                the selected intake channel.
+
+  FR2                           System shall collect category,              Must
+                                description, location, occurrence/report
+                                date, contact details and source channel.
+
+  FR3                           System shall generate a unique              Must
+                                case/reference number for each
+                                accepted complaint.
+
+  FR4                           System shall create a structured case       Must
+                                record in the backend.
+
+  FR5                           System shall create or update the           Must
+                                corresponding person as a SwiftAgent
+                                contact when integration is available.
+
+  FR6                           System shall support Reported →             Must
+                                Under Investigation → Response Issued
+                                → Resolved.
+
+  FR7                           System shall support Escalated as a         Must
+                                controlled branch state.
+
+  FR8                           Only authorized staff shall change case     Must
+                                stages.
+
+  FR9                           System shall record who changed a           Must
+                                stage and when.
+
+  FR10                          System shall calculate case age and         Must
+                                SLA status from configurable rules.
+
+  FR11                          System shall display SLA-risk cases         Must
+                                prominently to authorized staff.
+
+  FR12                          A valid stage change shall generate an      Must
+                                integration event/webhook.
+
+  FR13                          Zapier shall map an approved event to       Must
+                                the configured SwiftAgent
+                                action/campaign, subject to capability
+                                verification.
+
+  FR14                          System shall record integration             Must
+                                success/failure and support safe retry
+                                behavior.
+
+
+
+
+                                                   17
+    PRODUCT REQUIREMENTS DOCUMENT                                                       Host Community Case Management
+
+
+
+
+      ID                               Requirement                               Priority
+
+      FR15                             Community member shall be able to         Must
+                                       retrieve their case status using an
+                                       approved reference/contact mechanism.
+
+      FR16                             Case officer shall be able to add         Should
+                                       investigation notes and evidence
+                                       metadata.
+
+      FR17                             Case officer shall be able to record a    Must
+                                       response and resolution summary.
+
+      FR18                             Manager shall be able to view             Must
+                                       portfolio-level dashboard information.
+
+      FR19                             System shall provide downloadable         Must
+                                       case summary/export.
+
+      FR20                             System shall preserve a complete case     Must
+                                       timeline and audit history.
+
+      FR21                             System shall prevent unauthorized         Must
+                                       access to another complainant's case
+                                       information.
+
+      FR22                             System shall support configurable         Should
+                                       notification templates/campaign
+                                       mappings.
+
+      FR23                             System shall support offline-tolerant     Should
+                                       behavior where technically feasible for
+                                       the selected intake channel.
+
+
+     9.1 Required case fields
+•
+     Case ID / reference number
+
+•
+     Complainant/contact ID
+
+•
+     Complaint category and subcategory
+
+•
+     Description of complaint
+
+•
+     Location / community / site
+
+•
+     Date/time reported and, where known, date/time of occurrence
+
+•
+     Intake channel
+
+•
+     Current stage
+
+
+
+
+                                                          18
+    PRODUCT REQUIREMENTS DOCUMENT                       Host Community Case Management
+
+
+•
+     Assigned officer
+
+•
+     Priority / severity
+
+•
+     SLA target and current SLA status
+
+•
+     Investigation notes and evidence references
+
+•
+     Response details
+
+•
+     Resolution summary
+
+•
+     Created/updated/resolved timestamps
+
+•
+     Communication and integration event history
+
+
+
+
+                                                   19
+PRODUCT REQUIREMENTS DOCUMENT                                                  Host Community Case Management
+
+
+
+
+ 10. SwiftAgent Integration
+ SwiftAgent is not the source of truth for the case. The case-management backend owns the case record and
+
+ workflow state. SwiftAgent is used to extend that workflow with CRM contact management, pipeline
+
+ representation and automated communication. Zapier acts as the event-driven bridge.
+
+
+ 10.1 Integration sequence
+ 1    The community member submits a complaint.
+
+ 2    The backend creates the case and assigns a unique reference.
+
+ 3    The backend creates or updates the complainant contact in SwiftAgent through the verified integration
+
+      path.
+
+ 4    When a case officer changes the case stage, the backend creates a structured stage-change event.
+
+ 5    The backend sends the event to a Zapier webhook.
+
+ 6    Zapier maps the event to the appropriate SwiftAgent contact and pipeline stage.
+
+ 7    Zapier triggers the configured status communication/campaign for that stage.
+
+ 8    The backend records the integration event, result and timestamp for audit/monitoring.
+
+
+ 10.2 Example event payload
+     { caseId, referenceNumber, contactId, category, stage, previousStage,
+     timestamp, slaStatus }
+
+ The exact payload should be finalized during implementation. Sensitive case details should not be sent to
+
+ third-party automation systems unless necessary for the specific action and covered by the organization's
+
+ privacy/data-processing requirements.
+
+
+
+
+                                                     20
+PRODUCT REQUIREMENTS DOCUMENT                                                           Host Community Case Management
+
+
+
+ 10.3 Example stage-to-message mapping
+
+  Case event                           SwiftAgent action                         Example communication purpose
+
+  Case created / Reported              Contact + pipeline update; confirmation   Tell complainant the complaint was
+                                       campaign                                  received and provide reference.
+
+  Under Investigation                  Move pipeline stage; investigation        Tell complainant the case is actively
+                                       campaign                                  being investigated.
+
+  Response Issued                      Move pipeline stage; response             Tell complainant that a response has
+                                       campaign                                  been issued.
+
+  Resolved                             Move pipeline stage; closure campaign     Tell complainant the case has been
+                                                                                 resolved and how to follow up if
+                                                                                 permitted.
+
+  Escalated                            Move/flag pipeline stage; escalation      Explain that the case requires additional
+                                       communication                             review and remains tracked.
+
+
+ 10.4 Critical verification gate
+ Before implementation, verify exactly what SwiftAgent exposes through Zapier. The PRD must not
+
+ assume that contact creation, pipeline-stage updates and campaign triggers are all available as native
+
+ Zapier actions. The build should proceed only after the actual trigger/action set, authentication, field
+
+ mapping, rate limits, webhook behavior and error handling are confirmed. If a required action is
+
+ unavailable, an alternative integration path must be selected and documented.
+
+
+
+
+                                                         21
+    PRODUCT REQUIREMENTS DOCUMENT                                                          Host Community Case Management
+
+
+
+
+     11. Notification & Communication Model
+     The communication model is designed around a simple promise: once a complaint becomes a case, the
+
+     complainant should not have to repeatedly chase the organization for basic progress information.
+
+
+     11.1 Communication channels
+
+      Channel                              Role in MVP                               Considerations
+
+      SMS                                  High-value low-connectivity option;       Requires an SMS provider/gateway and
+                                           suitable for concise status messages.     delivery/error handling.
+
+      WhatsApp                             Potentially valuable for communities      Requires an approved WhatsApp
+                                           already using WhatsApp.                   Business/API route and
+                                                                                     template/consent considerations.
+
+      Email                                Useful where complainants have            Not suitable as the only channel for
+                                           reliable email access.                    low-connectivity environments.
+
+      Web status page                      Reference-based status lookup for users   Must avoid exposing sensitive
+                                           with internet access.                     information through guessable case
+                                                                                     references.
+
+
+     11.2 Notification rules
+•
+      Send an acknowledgement after successful case creation.
+
+•
+      Send a status update on each defined lifecycle transition where communication is appropriate.
+
+•
+      Do not send duplicate notifications when the same webhook is retried.
+
+•
+      Record notification attempts and outcomes.
+
+•
+      Provide a safe fallback when delivery fails; the failure should be visible to staff rather than silently
+
+      discarded.
+
+•
+      Notification content should contain only the minimum information required to identify and explain the
+
+      update.
+
+
+     11.3 Accessibility and language
+     Messages and forms should use plain language, short sentences and minimal internal terminology.
+
+     Multilingual support is a potential future enhancement unless a pilot customer identifies a specific
+
+     language requirement that must be included earlier. The product should be designed so additional
+
+     languages can be added without redesigning the underlying case model.
+
+
+
+
+                                                              22
+PRODUCT REQUIREMENTS DOCUMENT                                                     Host Community Case Management
+
+
+
+
+ 12. Data Model & Case Record
+ The case database is the authoritative data store. SwiftAgent should hold only the contact/CRM
+
+ information needed for the integration and customer workflow, while detailed case history remains in the
+
+ application database.
+
+
+ 12.1 Core entities
+
+  Entity                              Purpose                              Important fields
+
+  Case                                Primary grievance record.            ID, reference, category, description,
+                                                                           location, stage, priority, SLA,
+                                                                           timestamps.
+
+  Contact                             Person who raised the complaint.     Contact ID, name, phone/email where
+                                                                           provided, preferred channel,
+                                                                           consent/status.
+
+  User                                Internal platform user.              ID, role, organization, assigned
+                                                                           site/region, active status.
+
+  CaseAssignment                      Ownership history.                   Case, officer, assigned_at,
+                                                                           unassigned_at, reason.
+
+  CaseEvent                           Immutable timeline event.            Case, event type, actor, timestamp,
+                                                                           metadata.
+
+  InvestigationNote                   Operational investigation record.    Case, author, note, timestamp,
+                                                                           visibility.
+
+  Evidence                            Reference to uploaded/supporting     Case, file reference, type, timestamp,
+                                      material.                            uploader.
+
+  NotificationEvent                   Communication attempt.               Case, channel, template/campaign,
+                                                                           status, provider reference, timestamp.
+
+  IntegrationEvent                    SwiftAgent/Zapier synchronization    Case, event type, payload reference,
+                                      event.                               status, retries, timestamps.
+
+  SLARecord                           Tracks target and risk.              Case, target time, warning time,
+                                                                           breached flag, escalation state.
+
+
+ 12.2 Data ownership rule
+ Application database: source of truth for case state and audit history.
+
+ SwiftAgent: CRM/contact and pipeline representation used for relationship and automation.
+
+ Zapier: workflow transport/orchestration, not long-term case storage.
+
+
+
+
+                                                         23
+PRODUCT REQUIREMENTS DOCUMENT                                                 Host Community Case Management
+
+
+
+ 12.3 Data retention
+ Retention periods should be configurable according to the customer's internal policy and applicable
+
+ legal/privacy requirements. The MVP should not silently delete finalized cases merely because they are
+
+ old; retention and archival rules should be explicit and auditable.
+
+
+
+
+                                                       24
+    PRODUCT REQUIREMENTS DOCUMENT                                                          Host Community Case Management
+
+
+
+
+     13. Dashboard & Reporting
+     13.1 Case officer dashboard
+•
+      Newly reported cases awaiting assignment.
+
+•
+      Cases assigned to the current officer.
+
+•
+      Cases currently under investigation.
+
+•
+      Cases approaching SLA target.
+
+•
+      Escalated cases requiring action.
+
+•
+      Cases awaiting response issuance.
+
+•
+      Recently resolved cases.
+
+
+     13.2 Manager dashboard
+
+      Dashboard metric                                         Purpose
+
+      Total open cases                                         Understand current workload.
+
+      Cases by stage                                           Identify workflow bottlenecks.
+
+      Cases by category                                        Understand recurring complaint types.
+
+      Cases by location/community                              Identify geographic patterns.
+
+      Average time to first action                             Measure responsiveness.
+
+      Average time to resolution                               Measure end-to-end performance.
+
+      SLA at-risk / breached                                   Identify management intervention needs.
+
+      Escalation rate                                          Measure cases requiring additional intervention.
+
+      Notification delivery failures                           Monitor communication reliability.
+
+
+     13.3 Case detail page
+     The case detail view should present the reference number, complainant/contact summary, complaint
+
+     description, location, current stage, owner, SLA status, investigation notes, evidence, response, resolution
+
+     and chronological event timeline in one place.
+
+
+
+
+                                                          25
+PRODUCT REQUIREMENTS DOCUMENT                                                      Host Community Case Management
+
+
+
+ 13.4 Final case summary
+ When a case is finalized, the system should generate a structured summary for internal record-keeping and
+
+ audit. It should include what was reported, where/when it occurred, actions taken, response issued,
+
+ resolution, timestamps, responsible personnel and relevant communication history. Export is for human
+
+ filing and internal use; it is not automatic submission to a government system.
+
+
+
+
+                                                     26
+PRODUCT REQUIREMENTS DOCUMENT                                                           Host Community Case Management
+
+
+
+
+ 14. Non-Functional Requirements
+  Attribute                                                Requirement
+
+  Usability                                                Community intake must be simple, mobile-first and
+                                                           understandable to users with limited technical literacy.
+
+  Performance                                              Common dashboard and case operations should return
+                                                           quickly under normal load; long-running tasks should be
+                                                           asynchronous.
+
+  Reliability                                              Case creation must be durable; temporary Zapier/SwiftAgent
+                                                           failure must not lose the underlying case.
+
+  Integration resilience                                   Webhook calls require timeout handling, retry logic,
+                                                           idempotency and observable failures.
+
+  Auditability                                             Stage changes, assignments, important edits and integration
+                                                           events must be timestamped and attributable.
+
+  Security                                                 Access must be role-restricted; sensitive case data must not
+                                                           be exposed to unauthorized users.
+
+  Availability                                             Platform should be suitable for operational use and support
+                                                           recoverable service failures.
+
+  Connectivity                                             Intake should tolerate intermittent connectivity where the
+                                                           selected channel technically permits it.
+
+  Scalability                                              Architecture should support multiple organizations/sites
+                                                           without a separate codebase.
+
+  Maintainability                                          Workflow, categories, SLA rules and notification mappings
+                                                           should be configurable where practical.
+
+  Data integrity                                           Database constraints should prevent invalid stage transitions,
+                                                           orphaned cases and inconsistent ownership.
+
+  Observability                                            Logs, integration status, errors and key operational metrics
+                                                           should be available to administrators.
+
+
+ 14.1 Offline tolerance
+ Connectivity in remote communities can be inconsistent. The MVP should prioritize channels that
+
+ naturally work under constrained connectivity, particularly SMS where feasible, while the web/PWA
+
+ experience should handle intermittent connection states gracefully. A fully offline-first native mobile
+
+ application can remain a future enhancement unless the pilot demonstrates that it is necessary.
+
+
+
+
+                                                      27
+PRODUCT REQUIREMENTS DOCUMENT                                                                   Host Community Case Management
+
+
+
+
+ 15. Technical Architecture & Tech Stack
+ The architecture should separate the case-management core from the automation/CRM integration. This
+
+ preserves a clear source of truth and prevents the external CRM workflow from becoming the only place
+
+ where case state exists.
+
+
+
+
+        Community Intake                 Case API                      Case Database                        Dashboard
+     Web / PWA / SMS / WhatsApp     FastAPI / TypeScript             PostgreSQL / audit trail              Officer / Manager
+                                         integration
+
+
+
+
+                                        SwiftAgent                          Zapier
+                                  CRM / pipeline automation        Webhook / workflow bridge
+
+
+
+
+                                       Notifications                       Reports
+                                  Email / SMS / WhatsApp             Case summary / export
+
+
+
+
+                                                              28
+    PRODUCT REQUIREMENTS DOCUMENT                                                Host Community Case Management
+
+
+
+     15.1 Recommended stack
+
+      Layer                         Choice                                Why
+
+      Frontend                      React + Vite or Next.js               Mature component model for
+                                                                          mobile-first intake and role-based staff
+                                                                          dashboards.
+
+      Backend                       Python FastAPI                        Strong fit for structured APIs,
+                                                                          validation, asynchronous endpoints and
+                                                                          future analytics.
+
+      Validation                    Pydantic                              Clear schema validation for case intake,
+                                                                          workflow events and API contracts.
+
+      Database                      PostgreSQL                            Reliable relational integrity for cases,
+                                                                          contacts, users, audit trails and
+                                                                          reporting queries.
+
+      ORM / migrations              SQLAlchemy + Alembic                  Mature Python data layer and migration
+                                                                          tooling.
+
+      Integration service           TypeScript/Node where SwiftAgent      Keeps SwiftAgent-native integration
+                                    SDK/runtime requires it               logic isolated from core case
+                                                                          persistence.
+
+      Automation                    Zapier webhooks                       Event-driven bridge for verified
+                                                                          SwiftAgent CRM/pipeline/campaign
+                                                                          actions.
+
+      Notifications                 SMS provider + email provider;        Supports multiple community
+                                    WhatsApp Business/API where           communication patterns.
+                                    approved
+
+      Background jobs               Celery + Redis or equivalent          Suitable for retries, scheduled SLA
+                                                                          checks and notification processing.
+
+      Object storage                S3-compatible storage                 Evidence attachments and generated
+                                                                          reports.
+
+      Report generation             Server-side Python PDF service        Creates downloadable structured case
+                                                                          summaries.
+
+      Containerization              Docker                                Consistent development and
+                                                                          deployment environments.
+
+      CI/CD                         GitHub Actions or equivalent          Automated tests, build and deployment.
+
+      Hosting                       Cloud provider such as AWS/Azure or   Elastic infrastructure and managed
+                                    equivalent                            database/storage options.
+
+
+     15.2 API responsibilities
+•
+     Create and validate cases.
+
+
+
+
+                                                      29
+    PRODUCT REQUIREMENTS DOCUMENT                               Host Community Case Management
+
+
+•
+     Retrieve and update cases according to role permissions.
+
+•
+     Manage stage transitions and enforce workflow rules.
+
+•
+     Assign and reassign cases.
+
+•
+     Expose secure status lookup for complainants.
+
+•
+     Create integration events and webhook deliveries.
+
+•
+     Store audit events and notification results.
+
+•
+     Generate case summary exports.
+
+
+
+
+                                                         30
+    PRODUCT REQUIREMENTS DOCUMENT                                                          Host Community Case Management
+
+
+
+
+     16. Security, Privacy & Access Control
+     Complaint records may contain names, phone numbers, locations, allegations, evidence and sensitive
+
+     community-relations information. Security is therefore a core product requirement.
+
+
+     16.1 Role-based access
+
+      Role                                                     Access
+
+      Community Member                                         Submit a complaint and view only the status/information
+                                                               authorized for their own case.
+
+      Case Officer                                             View and manage cases assigned to them or within their
+                                                               permitted organizational scope.
+
+      Manager / Lead                                           View portfolio-level cases and manage escalations within
+                                                               their organizational scope.
+
+      Administrator                                            Configure users, categories, SLA rules and integrations using
+                                                               least-privilege principles.
+
+
+     16.2 Security controls
+•
+      Authentication for internal staff.
+
+•
+      Role-based authorization on every protected API operation.
+
+•
+      Encryption in transit and appropriate encryption at rest.
+
+•
+      Secure secrets management for integration credentials.
+
+•
+      Input validation and output encoding.
+
+•
+      Rate limiting and abuse protection on public intake/status endpoints.
+
+•
+      Non-guessable case references or an additional verification factor for status lookup.
+
+•
+      Audit logs for privileged actions.
+
+•
+      Controlled file upload types and size limits for evidence.
+
+•
+      Webhook signature/authentication validation where supported.
+
+
+     16.3 Privacy principle
+     Only information necessary to handle the complaint and provide the service should be collected. External
+
+     automation payloads should be minimized. Customer-specific legal/privacy requirements should be
+
+     assessed during implementation before production launch.
+
+
+
+
+                                                          31
+    PRODUCT REQUIREMENTS DOCUMENT                                                            Host Community Case Management
+
+
+
+
+     17. Success Metrics & KPIs
+      Metric                                   MVP target / direction                  Why it matters
+
+      Successful case creation rate            High; failures exceptional and          Every accepted complaint must become
+                                               observable.                             a durable case.
+
+      Time from submission to case reference   Near-immediate.                         Confirms proof of receipt.
+
+      Time to first staff action               Decrease over baseline.                 Measures operational responsiveness.
+
+      Percentage of cases with assigned        100% for active cases.                  Prevents unowned complaints.
+      owner
+
+      SLA at-risk visibility                   100% of at-risk cases surfaced.         Ensures management can intervene.
+
+      Status notification success              High delivery rate; failures tracked.   Measures the transparency promise.
+
+      Duplicate notification rate              Near zero.                              Protects trust and reduces message
+                                                                                       fatigue.
+
+      Stage transition audit completeness      100%.                                   Ensures defensible history.
+
+      Resolution time                          Decrease over baseline.                 Measures workflow throughput.
+
+      Complainant status-lookup success        High among users who attempt it.        Measures accessibility of tracking.
+
+
+     17.1 Qualitative success
+•
+     Community members report greater confidence that complaints are being tracked.
+
+•
+     Case officers spend less time searching through informal channels for case history.
+
+•
+     Managers can identify ageing and escalation issues without manual spreadsheet consolidation.
+
+•
+     Organizations can reconstruct the lifecycle of a complaint from a single case record.
+
+
+
+
+                                                                  32
+PRODUCT REQUIREMENTS DOCUMENT                                                  Host Community Case Management
+
+
+
+
+ 18. Risks, Dependencies & Open Questions
+  Risk / Question                          Impact                       Mitigation / next action
+
+  SwiftAgent Zapier capabilities are not   High                         Confirm exact triggers/actions,
+  yet verified                                                          authentication, pipeline mapping,
+                                                                        campaign triggers, field mapping and
+                                                                        limits.
+
+  SMS/WhatsApp channel choice              High                         Run intake-channel discovery and pilot;
+                                                                        select a provider based on coverage,
+                                                                        reliability, cost and API support.
+
+  Poor network connectivity                High                         Prioritize low-bandwidth channels;
+                                                                        design retry and offline-tolerant web
+                                                                        behavior.
+
+  Sensitive complaint information          High                         Minimize third-party payloads; enforce
+                                                                        RBAC and secure integrations.
+
+  Complainant identity verification        Medium                       Define a safe status-lookup method
+                                                                        balancing accessibility and privacy.
+
+  Unclear SLA policy                       Medium                       Make SLA rules configurable per
+                                                                        category/site and obtain
+                                                                        customer-approved values.
+
+  Integration failure                      High                         Persist case state first; queue webhook
+                                                                        delivery; retry idempotently; expose
+                                                                        failure to staff.
+
+  Scope creep into full CRM/HSE            Medium                       Keep MVP focused on grievance case
+  platform                                                              management and communication.
+
+  Low adoption by staff                    Medium                       Keep workflow simple, provide clear
+                                                                        queues and minimize duplicate entry.
+
+  Incomplete communication delivery        Medium                       Store delivery results and provide
+                                                                        staff-visible exceptions/fallbacks.
+
+
+ 18.1 Open questions to resolve before build
+ 1    What exact SwiftAgent triggers/actions are available through Zapier today?
+
+ 2    Can SwiftAgent pipeline stages be updated through the available Zapier action, and can a campaign
+
+      be triggered by a stage event?
+
+ 3    What contact fields and custom fields can be created/updated?
+
+ 4    What is the preferred primary community intake channel: web/PWA, SMS, WhatsApp, or a
+
+      combination?
+
+
+
+
+                                                    33
+PRODUCT REQUIREMENTS DOCUMENT                                                   Host Community Case Management
+
+
+
+ 5   What case categories and SLA targets should the pilot customer configure?
+
+ 6   What information can a community member see when checking a case status?
+
+ 7   What internal escalation policy determines when a case enters Escalated?
+
+ 8   What are the organization's retention, privacy and evidence-handling requirements?
+
+
+
+
+                                                   34
+PRODUCT REQUIREMENTS DOCUMENT                                                     Host Community Case Management
+
+
+
+
+ 19. Roadmap & Milestones
+  Phase                               Focus                                Key outputs
+
+  Phase 1                             Discovery & workflow design          Confirm personas, complaint
+                                                                           categories, case stages, SLA rules,
+                                                                           status language and intake channel.
+
+  Phase 2                             Integration feasibility              Verify SwiftAgent + Zapier
+                                                                           triggers/actions, authentication, pipeline
+                                                                           mapping and notification/campaign
+                                                                           behavior.
+
+  Phase 3                             Core backend + data model            Cases, contacts, users, roles, workflow
+                                                                           engine, audit trail and SLA model.
+
+  Phase 4                             Community intake                     Responsive form/PWA; validation; case
+                                                                           reference; status lookup.
+
+  Phase 5                             Staff dashboard                      Case queue, filters, case detail,
+                                                                           assignment, stage transitions and
+                                                                           escalation controls.
+
+  Phase 6                             SwiftAgent automation                Contact synchronization, pipeline-stage
+                                                                           updates, status campaigns, webhook
+                                                                           retries and integration monitoring.
+
+  Phase 7                             Reporting & exports                  Case summary generation, export and
+                                                                           management reporting.
+
+  Phase 8                             Testing & pilot                      Simulated cases, usability testing,
+                                                                           integration failure tests, security checks
+                                                                           and pilot deployment.
+
+
+ 19.1 Pilot strategy
+ A controlled pilot should begin with a limited number of sites, complaint categories and communication
+
+ channels. Testing should include normal cases, duplicate submissions, incomplete complaints, notification
+
+ failures, integration outages, SLA-risk cases, escalations and resolution/closure.
+
+
+
+
+                                                          35
+    PRODUCT REQUIREMENTS DOCUMENT                                                   Host Community Case Management
+
+
+
+
+     20. Out of Scope & Future Scope
+     20.1 Out of scope for MVP
+•
+     Automatic submission to government or regulatory grievance systems where no verified public/API
+
+     channel exists.
+
+•
+     Real-time IoT/sensor detection of incidents; this product is complaint-driven rather than sensor-driven.
+
+•
+     Full enterprise CRM replacement.
+
+•
+     Full HSE incident-management suite.
+
+•
+     Complex compensation/payment processing.
+
+•
+     Automatic decision-making about whether a complaint is valid or fraudulent.
+
+•
+     AI-generated final resolutions without human review.
+
+•
+     Full multilingual conversational support unless required by the pilot.
+
+•
+     Native mobile applications for every platform unless pilot evidence justifies them.
+
+
+     20.2 Future scope
+•
+     Dedicated SMS-first intake and two-way SMS status interaction.
+
+•
+     WhatsApp conversational intake.
+
+•
+     Multilingual support and localized community terminology.
+
+•
+     AI-assisted complaint categorization and duplicate-case detection.
+
+•
+     Advanced analytics and recurring-issue heat maps.
+
+•
+     Community engagement dashboards and trend analysis.
+
+•
+     Integration with enterprise CRM, HSE or document-management systems.
+
+•
+     Mobile/offline-first native application for remote field/community officers.
+
+•
+     Configurable compensation/claims workflows where legally and operationally appropriate.
+
+•
+     Advanced SLA prediction and workload forecasting.
+
+
+
+
+                                                         36
+PRODUCT REQUIREMENTS DOCUMENT                                                    Host Community Case Management
+
+
+
+
+ 21. Acceptance Criteria
+ The MVP is acceptable when the following end-to-end scenarios pass in a controlled test environment:
+
+ 1   A community member can submit a complete complaint and receive a unique reference.
+
+ 2   A case officer can find the new case in the dashboard and see its complete initial record.
+
+ 3   The officer can assign the case and move it from Reported to Under Investigation.
+
+ 4   The stage change creates an integration event without changing the authoritative case state outside the
+
+     backend.
+
+ 5   The configured Zapier workflow receives the event and, where supported by the verified SwiftAgent
+
+     integration, updates the contact/pipeline and initiates the expected notification.
+
+ 6   The case officer can record investigation activity and move the case to Response Issued.
+
+ 7   The complainant receives or has access to the corresponding status update through the configured
+
+     channel.
+
+ 8   The case can be escalated and remains visible as an exception requiring management attention.
+
+ 9   The case can be moved to Resolved with a resolution summary and closure timestamp.
+
+ 10 All important case and stage events are visible in the audit timeline.
+
+ 11 If Zapier or SwiftAgent is unavailable, the case remains safely stored and the integration failure is
+     visible and retryable.
+
+ 12 A manager can identify open, ageing, at-risk and escalated cases from the dashboard.
+
+ 13 A finalized case can be exported as a structured summary.
+
+ 14 Unauthorized users cannot access another complainant's private case information.
+
+ 21.1 Integration-specific acceptance gate
+ No SwiftAgent integration claim should be marked 'passed' until the actual Zapier/SwiftAgent
+
+ capabilities have been demonstrated in a test account. The prototype should document which actions
+
+ are native, which require custom API/webhook steps, and which are not available.
+
+
+
+
+                                                      37
+PRODUCT REQUIREMENTS DOCUMENT                                                   Host Community Case Management
+
+
+
+
+ 22. Conclusion
+ The Host Community Complaint & Case Management Platform addresses a specific operational gap: a
+
+ complaint should not disappear after a phone call, letter or message. Once accepted, it should become a
+
+ traceable case with an owner, a defined lifecycle, a visible SLA, a complete history and understandable
+
+ communication back to the person who raised it.
+
+ The architecture deliberately separates responsibilities. The case-management application remains the
+
+ source of truth. SwiftAgent contributes CRM/pipeline and automated communication capabilities. Zapier
+
+ connects the two through event-driven workflows. This separation protects the integrity of the case record
+
+ while still capturing the practical value of automation.
+
+ The MVP should remain focused. Its success is not measured by how many features are added, but by
+
+ whether a real complaint can reliably travel from Reported to Resolved while both staff and the
+
+ complainant can see what is happening. The two major discovery gates—verification of
+
+ SwiftAgent/Zapier capabilities and selection of an appropriate low-connectivity intake channel—should be
+
+ resolved before the production integration is finalized.
+
+ The product therefore provides a foundation for a more transparent and accountable host-community
+
+ relations process, while leaving room for future expansion into multilingual intake, richer analytics, deeper
+
+ CRM/HSE integration and additional community-engagement workflows.
+
+
+                                 Prepared by: Tomii, Pecuilar and Saviour
+
+
+
+
+                                                       38
+

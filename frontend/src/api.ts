@@ -17,7 +17,16 @@ import type {
   SwiftAgentToolCatalog,
 } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
+const PRODUCTION_API_URL = "https://gaslit.onrender.com";
+const CONFIGURED_API_BASE = (
+  import.meta.env.VITE_API_BASE_URL ||
+  (typeof window !== "undefined" &&
+  (window.location.origin.includes("gaslit.onrender.com") ||
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1")
+    ? ""
+    : PRODUCTION_API_URL)
+).replace(/\/$/, "");
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -33,7 +42,20 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set("X-Staff-Key", staffKey);
   }
 
-  const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const primaryUrl = `${CONFIGURED_API_BASE}${path}`;
+  let response: Response;
+  try {
+    response = await fetch(primaryUrl, { ...options, headers });
+  } catch (err) {
+    // If local relative fetch failed, failover to live production backend on Render
+    if (CONFIGURED_API_BASE === "" && PRODUCTION_API_URL) {
+      const fallbackUrl = `${PRODUCTION_API_URL}${path}`;
+      response = await fetch(fallbackUrl, { ...options, headers });
+    } else {
+      throw err;
+    }
+  }
+
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new ApiError(body.detail ?? "Request failed", response.status);

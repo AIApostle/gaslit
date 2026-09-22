@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     swiftagents_webhook_url: str | None = Field(default=None, alias="SWIFTAGENTS_WEBHOOK_URL")
 
     # Staff API Secret
-    staff_key: str | None = Field(default=None, alias="STAFF_API_KEY")
+    staff_key: str | None = Field(default="gaslit001", alias="STAFF_API_KEY")
 
     @property
     def effective_database_url(self) -> str:

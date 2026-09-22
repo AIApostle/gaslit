@@ -16,7 +16,9 @@ def app_client(tmp_path: Path) -> TestClient:
     importlib.reload(database)
     importlib.reload(service)
     importlib.reload(main)
-    return TestClient(main.app)
+    client = TestClient(main.app)
+    client.headers["X-Staff-Key"] = "gaslit001"
+    return client
 
 
 def complaint_payload() -> dict[str, str]:

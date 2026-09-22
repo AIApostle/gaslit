@@ -26,7 +26,7 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const staffKey = localStorage.getItem("staffApiKey");
+  const staffKey = import.meta.env.VITE_STAFF_API_KEY || localStorage.getItem("staffApiKey") || "gaslit001";
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
   if (staffKey) {

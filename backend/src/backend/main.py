@@ -98,8 +98,17 @@ def require_agent(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid agent credential")
 
 
-def require_staff(x_staff_key: str | None = Header(default=None)) -> None:
-    if settings.staff_key and x_staff_key != settings.staff_key:
+def require_staff(
+    x_staff_key: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+) -> None:
+    if not settings.staff_key:
+        return
+    token = x_staff_key or x_api_key
+    if not token and authorization:
+        token = authorization[7:].strip() if authorization.startswith("Bearer ") else authorization.strip()
+    if token != settings.staff_key:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid staff credential")
 
 

@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "AI_Apostle", email = "achasaviourikhamate@gmail.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
     "pydantic>=2.10.0",
@@ -48,7 +48,7 @@ build-backend = "uv_build"
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py311"
 select = ["E", "F", "I", "UP", "W", "B", "C4", "C90", "PT", "Q", "SIM", "TID", "TRY", "ARG", "PTH", "ERA", "PD", "PL", "RUF", "RET", "PTH"]
 ignore = []
 fixable = ["F", "I", "UP", "B", "C4", "C90", "SIM", "TID", "TRY", "ARG", "PTH", "ERA", "PD", "PL", "RUF", "RET"]
@@ -61,7 +61,7 @@ skip-magic-trailing-comma = false
 line-ending = "lf"
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true

@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,8 +84,17 @@ app.add_middleware(
 )
 
 
-def require_agent(x_agent_key: str | None = Header(default=None)) -> None:
-    if settings.agent_key and x_agent_key != settings.agent_key:
+def require_agent(
+    x_agent_key: str | None = Header(default=None),
+    x_api_key: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+) -> None:
+    if not settings.agent_key:
+        return
+    token = x_agent_key or x_api_key
+    if not token and authorization:
+        token = authorization[7:].strip() if authorization.startswith("Bearer ") else authorization.strip()
+    if token != settings.agent_key:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid agent credential")
 
 
@@ -184,17 +193,27 @@ async def agent_request_handoff(
 
 
 @app.get("/v1/agent/tools.json")
-def get_swiftagents_tool_catalog() -> dict[str, Any]:
+def get_swiftagents_tool_catalog(request: Request) -> dict[str, Any]:
     """Returns the ready-to-import SwiftAgents tool schemas for your SwiftAgents Dashboard."""
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or "gaslit.onrender.com"
+    proto = request.headers.get("x-forwarded-proto") or ("https" if "onrender.com" in str(host) else request.url.scheme)
+    base_url = f"{proto}://{host}".rstrip("/")
+
     return {
         "version": "1.0.0",
         "description": "Host Community Case Desk AI Agent Tool Suite",
+        "server_url": base_url,
+        "catalog_url": f"{base_url}/v1/agent/tools.json",
+        "webhook_url": f"{base_url}/v1/agent/webhook",
+        "openapi_url": f"{base_url}/openapi.json",
         "tools": [
             {
                 "name": "submit_complaint",
                 "description": "Log an official host community grievance (gas flare, oil spill, water contamination, health issue) to generate a verified case ticket.",
                 "method": "POST",
+                "url": f"{base_url}/v1/agent/complaints",
                 "endpoint": "/v1/agent/complaints",
+                "headers": {"Content-Type": "application/json"},
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -212,7 +231,9 @@ def get_swiftagents_tool_catalog() -> dict[str, Any]:
                 "name": "lookup_case",
                 "description": "Retrieve the current live status, assigned officer, investigation notes, and SLA status for an existing ticket.",
                 "method": "POST",
+                "url": f"{base_url}/v1/agent/cases/lookup",
                 "endpoint": "/v1/agent/cases/lookup",
+                "headers": {"Content-Type": "application/json"},
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -226,7 +247,9 @@ def get_swiftagents_tool_catalog() -> dict[str, Any]:
                 "name": "attach_evidence",
                 "description": "Attach a photo, PDF document, or incident file uploaded by the user during the chat to an active case.",
                 "method": "POST",
+                "url": f"{base_url}/v1/agent/evidence",
                 "endpoint": "/v1/agent/evidence",
+                "headers": {"Content-Type": "application/json"},
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -243,7 +266,9 @@ def get_swiftagents_tool_catalog() -> dict[str, Any]:
                 "name": "request_human_handoff",
                 "description": "Escalate the current chat session to a live human Community Liaison Officer.",
                 "method": "POST",
+                "url": f"{base_url}/v1/agent/handoff",
                 "endpoint": "/v1/agent/handoff",
+                "headers": {"Content-Type": "application/json"},
                 "parameters": {
                     "type": "object",
                     "properties": {

@@ -4,9 +4,9 @@ services:
     env: python
     rootDir: backend
     buildCommand: uv sync --frozen --no-dev
-    startCommand: uv run --active uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uv run --active uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.12.8
+        value: 3.11.10
       - key: UV_PYTHON_DOWNLOADS
         value: auto

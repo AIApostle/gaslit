@@ -21,7 +21,10 @@ class Settings(BaseSettings):
 
     # SwiftAgents Integration
     swiftagents_company_id: str = Field(default="e465b6dd-7f97-4fcd-bed2-737555796064", alias="SWIFTAGENTS_COMPANY_ID")
-    swiftagents_public_key: str | None = Field(default=None, alias="SWIFTAGENTS_PUBLIC_KEY")
+    swiftagents_public_key: str = Field(
+        default="swa_live_0c61a7623c4e53abe3e87d542ad82ba86092e6f6018c4ab426f0f358385d1679",
+        alias="SWIFTAGENTS_PUBLIC_KEY",
+    )
     agent_key: str | None = Field(default=None, alias="SWIFTAGENTS_AGENT_KEY")
     swiftagents_webhook_url: str | None = Field(default=None, alias="SWIFTAGENTS_WEBHOOK_URL")
 

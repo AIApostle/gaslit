@@ -89,9 +89,33 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db_async() -> None:
+    global _engine, _session_maker
     engine = get_engine()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    except Exception as exc:
+        # If external database (e.g. Neon) is unreachable or DNS lookup fails,
+        # fail over to local SQLite so Render / FastAPI starts up cleanly without crashing
+        if "sqlite" not in str(engine.url):
+            import logging
+            logging.getLogger("uvicorn.error").warning(
+                "Primary database connection failed on startup (%s: %s). Falling back to local SQLite to keep server operational.",
+                type(exc).__name__,
+                exc,
+            )
+            fallback_url = f"sqlite+aiosqlite:///{settings.database_path}"
+            _engine = create_async_engine(fallback_url, pool_pre_ping=True, echo=False)
+            _session_maker = async_sessionmaker(
+                bind=_engine,
+                class_=AsyncSession,
+                expire_on_commit=False,
+                autoflush=False,
+            )
+            async with _engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+        else:
+            raise
 
 
 def initialize_database() -> None:

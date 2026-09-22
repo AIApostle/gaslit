@@ -33,7 +33,13 @@ class Settings(BaseSettings):
 
     @property
     def effective_database_url(self) -> str:
-        if self.database_url:
+        if (
+            self.database_url
+            and "YOUR_NEON_PASSWORD" not in self.database_url
+            and "ep-xxxx-pooler" not in self.database_url
+            and "your_neon_password" not in self.database_url.lower()
+            and "placeholder" not in self.database_url.lower()
+        ):
             return self.database_url
         return f"sqlite+aiosqlite:///{self.database_path}"
 

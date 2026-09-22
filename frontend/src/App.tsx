@@ -136,9 +136,10 @@ export function App() {
 
   const handleOpenChat = (topic?: string) => {
     setChatTopic(topic);
-    setChatModalOpen(true);
-    if (isLoaded) {
+    if (isLoaded && window.SwiftAgentWidget) {
       openAgent();
+    } else {
+      setChatModalOpen(true);
     }
   };
 
@@ -215,17 +216,19 @@ export function App() {
         {view === "settings" && <Settings setToast={setToast} config={config} />}
       </main>
 
-      {/* Floating launcher visible on all views */}
-      <button
-        type="button"
-        className="floating-ai-launcher"
-        onClick={() => handleOpenChat()}
-        title="Open SwiftAgents AI Grievance Officer"
-      >
-        <Bot size={18} />
-        <span>Chat with AI Officer</span>
-        <span className="status-dot"></span>
-      </button>
+      {/* Floating launcher fallback: only shown if official SwiftAgents CDN widget is not loaded */}
+      {!isLoaded && (
+        <button
+          type="button"
+          className="floating-ai-launcher"
+          onClick={() => handleOpenChat()}
+          title="Open AI Grievance Officer"
+        >
+          <Bot size={18} />
+          <span>Chat with AI Officer</span>
+          <span className="status-dot"></span>
+        </button>
+      )}
 
       {/* Interactive SwiftAgents In-App Pop-up Chat */}
       <SwiftAgentChatModal

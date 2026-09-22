@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: gaslit-backend
+    env: python
+    rootDir: backend
+    buildCommand: uv sync --frozen --no-dev
+    startCommand: uv run --active uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: UV_PYTHON_DOWNLOADS
+        value: auto

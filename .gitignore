@@ -6,6 +6,8 @@ backend/.venv/
 .env
 .env.*
 *.env
+!.env.example
+!*.example
 
 # Python
 __pycache__/

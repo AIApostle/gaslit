@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -17,6 +18,8 @@ class ContactChannel(StrEnum):
     EMAIL = "email"
     WHATSAPP = "whatsapp"
     PHONE = "phone"
+    IN_BROWSER_CHAT = "in_browser_chat"
+    CHAT = "chat"
 
 
 class SlaStatus(StrEnum):
@@ -29,7 +32,7 @@ class SlaStatus(StrEnum):
 class ComplaintIntake(BaseModel):
     complainant_name: str = Field(min_length=2, max_length=160)
     contact_value: str = Field(min_length=4, max_length=160)
-    preferred_channel: ContactChannel
+    preferred_channel: ContactChannel = ContactChannel.IN_BROWSER_CHAT
     category: str = Field(min_length=2, max_length=100)
     description: str = Field(min_length=10, max_length=5000)
     location: str = Field(min_length=2, max_length=240)
@@ -41,6 +44,25 @@ class ComplaintIntake(BaseModel):
     @classmethod
     def normalize_contact(cls, value: str) -> str:
         return value.strip().lower()
+
+
+class SwiftAgentComplaintInput(BaseModel):
+    complainant_name: str = Field(default="Community Member", min_length=2, max_length=160)
+    contact_value: str = Field(default="in-app-session", min_length=3, max_length=160)
+    preferred_channel: ContactChannel = ContactChannel.IN_BROWSER_CHAT
+    category: str = Field(default="Environmental Grievance", min_length=2, max_length=100)
+    description: str = Field(min_length=5, max_length=5000)
+    location: str = Field(default="Host Community Site", min_length=2, max_length=240)
+    occurred_at: datetime | None = None
+    priority: str = Field(default="normal", pattern="^(low|normal|high|critical)$")
+
+
+class SwiftAgentToolResponse(BaseModel):
+    ticket_id: str
+    status: str
+    verification_code: str
+    message: str
+    badge: dict[str, str]
 
 
 class CaseTransition(BaseModel):
@@ -87,7 +109,7 @@ class EventView(BaseModel):
     event_type: str
     actor: str
     occurred_at: datetime
-    metadata: dict[str, object]
+    metadata: dict[str, Any]
 
 
 class CaseWithTimeline(BaseModel):
@@ -96,8 +118,8 @@ class CaseWithTimeline(BaseModel):
 
 
 class StatusLookup(BaseModel):
-    reference: str = Field(min_length=8, max_length=40)
-    verification_code: str | None = Field(default=None, min_length=4, max_length=20)
+    reference: str = Field(min_length=6, max_length=40)
+    verification_code: str | None = Field(default=None, min_length=3, max_length=20)
     contact_value: str | None = Field(default=None, min_length=4, max_length=160)
 
     @field_validator("contact_value")

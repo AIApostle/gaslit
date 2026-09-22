@@ -1,16 +1,21 @@
 import {
   Activity,
+  ArrowLeft,
   BarChart3,
   Bell,
+  Bot,
   BriefcaseBusiness,
   CheckCircle,
   CircleUserRound,
   Clock,
   Download,
+  Droplets,
+  Flame,
   FileText,
   FolderOpen,
   Gauge,
   KeyRound,
+  Lock,
   Plus,
   RefreshCw,
   Save,
@@ -18,15 +23,18 @@ import {
   Send,
   ShieldCheck,
   Siren,
-  SquarePen
+  Sparkles,
+  SquarePen,
+  Trees,
+  X,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   addEvidence,
   addNote,
+  agentSubmitComplaint,
   assignCase,
-  createComplaint,
   exportCase,
   getCase,
   getCaseNotifications,
@@ -39,8 +47,9 @@ import {
   lookupStatus,
   retryHandoff,
   retryNotification,
-  transitionCase
+  transitionCase,
 } from "./api";
+import { useSwiftAgent } from "./hooks/useSwiftAgent";
 import type {
   CaseExport,
   CaseStage,
@@ -51,17 +60,18 @@ import type {
   InvestigationNote,
   NotificationEvent,
   PortfolioReport,
-  PublicStatus
+  PublicStatus,
+  SwiftAgentToolResponse,
 } from "./types";
 
-type View = "workspace" | "intake" | "status" | "reports" | "integration" | "settings";
+type View = "portal" | "workspace" | "reports" | "integration" | "settings";
 
 const stageOptions: { value: CaseStage; label: string }[] = [
   { value: "reported", label: "Reported" },
   { value: "under_investigation", label: "Investigation" },
   { value: "response_issued", label: "Response issued" },
   { value: "escalated", label: "Escalated" },
-  { value: "resolved", label: "Resolved" }
+  { value: "resolved", label: "Resolved" },
 ];
 
 const queueOptions = [
@@ -69,7 +79,7 @@ const queueOptions = [
   { value: "unassigned", label: "Unassigned" },
   { value: "at_risk", label: "At risk" },
   { value: "breached", label: "Breached" },
-  { value: "escalated", label: "Escalated" }
+  { value: "escalated", label: "Escalated" },
 ];
 
 function titleCase(value: string) {
@@ -80,39 +90,68 @@ function formatDate(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString() : "Not set";
 }
 
-function App() {
-  const [view, setView] = useState<View>("workspace");
+export function App() {
+  // Default to public user portal
+  const [view, setView] = useState<View>("portal");
   const [toast, setToast] = useState<string | null>(null);
+  const { openAgent, isLoaded, config } = useSwiftAgent();
+
+  const isStaffDesk = view !== "portal";
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand" type="button" onClick={() => setView("workspace")}>
+        <button className="brand" type="button" onClick={() => setView("portal")}>
           <span className="brand-mark">HC</span>
           <span>
-            <strong>Community Case Desk</strong>
-            <small>Complaint to resolution control room</small>
+            <strong>Community Voice</strong>
+            <small>{isStaffDesk ? "Staff Case Desk" : "Grievance & Resolution Portal"}</small>
           </span>
         </button>
+
         <nav className="nav-tabs" aria-label="Primary navigation">
-          <NavButton active={view === "workspace"} icon={<BriefcaseBusiness />} onClick={() => setView("workspace")}>
-            Workspace
-          </NavButton>
-          <NavButton active={view === "intake"} icon={<Plus />} onClick={() => setView("intake")}>
-            Intake
-          </NavButton>
-          <NavButton active={view === "status"} icon={<Search />} onClick={() => setView("status")}>
-            Status
-          </NavButton>
-          <NavButton active={view === "reports"} icon={<BarChart3 />} onClick={() => setView("reports")}>
-            Reports
-          </NavButton>
-          <NavButton active={view === "integration"} icon={<Bell />} onClick={() => setView("integration")}>
-            Integration
-          </NavButton>
-          <NavButton active={view === "settings"} icon={<KeyRound />} onClick={() => setView("settings")}>
-            Settings
-          </NavButton>
+          {!isStaffDesk ? (
+            <>
+              <button className="portal-btn-primary" style={{ padding: "8px 18px", fontSize: "13px" }} type="button" onClick={openAgent}>
+                <Bot size={15} />
+                <span>Talk to AI Officer</span>
+              </button>
+              <button
+                className="nav-button"
+                type="button"
+                onClick={() => setView("workspace")}
+                title="Access internal officer & admin case desk"
+                style={{ marginLeft: "12px", border: "1px solid var(--line)" }}
+              >
+                <Lock size={15} />
+                <span>Officer / Admin Desk</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                className="nav-button"
+                type="button"
+                onClick={() => setView("portal")}
+                style={{ marginRight: "12px", fontWeight: 700 }}
+              >
+                <ArrowLeft size={16} />
+                <span>Public Portal</span>
+              </button>
+              <NavButton active={view === "workspace"} icon={<BriefcaseBusiness size={16} />} onClick={() => setView("workspace")}>
+                Cases
+              </NavButton>
+              <NavButton active={view === "reports"} icon={<BarChart3 size={16} />} onClick={() => setView("reports")}>
+                Analytics
+              </NavButton>
+              <NavButton active={view === "integration"} icon={<Bell size={16} />} onClick={() => setView("integration")}>
+                SwiftAgents Hub
+              </NavButton>
+              <NavButton active={view === "settings"} icon={<KeyRound size={16} />} onClick={() => setView("settings")}>
+                Settings
+              </NavButton>
+            </>
+          )}
         </nav>
       </header>
 
@@ -127,13 +166,24 @@ function App() {
       )}
 
       <main>
+        {view === "portal" && <PublicCommunityPortal openAgent={openAgent} setToast={setToast} />}
         {view === "workspace" && <Workspace setToast={setToast} />}
-        {view === "intake" && <Intake setToast={setToast} />}
-        {view === "status" && <StatusLookup />}
         {view === "reports" && <Reports />}
-        {view === "integration" && <IntegrationMonitor setToast={setToast} />}
-        {view === "settings" && <Settings setToast={setToast} />}
+        {view === "integration" && <IntegrationMonitor setToast={setToast} openAgent={openAgent} config={config} />}
+        {view === "settings" && <Settings setToast={setToast} config={config} />}
       </main>
+
+      {/* Floating launcher visible on all views */}
+      <button
+        type="button"
+        className="floating-ai-launcher"
+        onClick={openAgent}
+        title="Open SwiftAgents AI Grievance Officer"
+      >
+        <Bot size={18} />
+        <span>Chat with AI Officer</span>
+        {isLoaded && <span className="status-dot"></span>}
+      </button>
     </div>
   );
 }
@@ -142,7 +192,7 @@ function NavButton({
   active,
   icon,
   children,
-  onClick
+  onClick,
 }: {
   active: boolean;
   icon: React.ReactNode;
@@ -157,10 +207,163 @@ function NavButton({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Public Community Portal (Clean, Formless, SwiftAgents First)
+// ---------------------------------------------------------------------------
+
+function PublicCommunityPortal({
+  openAgent,
+  setToast,
+}: {
+  openAgent: () => void;
+  setToast: (msg: string) => void;
+}) {
+  const [simModalOpen, setSimModalOpen] = useState(false);
+
+  return (
+    <div className="portal-container">
+      {/* Hero Section */}
+      <section className="portal-hero">
+        <div className="portal-badge">
+          <Sparkles size={15} />
+          <span>Official Host Community Grievance Service • Powered by SwiftAgents</span>
+        </div>
+        <h1>Report Host Community Grievances Directly. No Paperwork. No Delays.</h1>
+        <p>
+          Speak or chat in natural language with our conversational AI officer. Describe what happened,
+          upload incident photos, and receive your official verified case tracking badge in seconds.
+        </p>
+
+        <div className="portal-actions">
+          <button type="button" className="portal-btn-primary" onClick={openAgent}>
+            <Bot size={20} />
+            <span>Report Grievance with AI Officer</span>
+          </button>
+          <button type="button" className="portal-btn-secondary" onClick={openAgent}>
+            <Search size={18} />
+            <span>Check Status with AI Assistant</span>
+          </button>
+        </div>
+
+        <div style={{ marginTop: "12px" }}>
+          <button
+            type="button"
+            className="button ghost"
+            style={{ fontSize: "13px", color: "var(--accent)" }}
+            onClick={() => setSimModalOpen(true)}
+          >
+            ⚡ Test Drive In-Browser Tool Simulator
+          </button>
+        </div>
+      </section>
+
+      {/* Category Cards (Interactive Launchers for SwiftAgents) */}
+      <div className="portal-cards-grid">
+        <button type="button" className="portal-card clickable" onClick={openAgent} title="Launch AI Officer to report gas flaring">
+          <div className="portal-card-icon">
+            <Flame size={22} />
+          </div>
+          <h3>Gas Flaring & Soot</h3>
+          <p>
+            Continuous toxic flare emissions, heavy black soot fallouts, nighttime noise vibrations,
+            and heat damage to community roofs and vegetation.
+          </p>
+          <span className="card-launch-action">Report with AI &rarr;</span>
+        </button>
+
+        <button type="button" className="portal-card clickable" onClick={openAgent} title="Launch AI Officer to report oil spills">
+          <div className="portal-card-icon">
+            <Droplets size={22} />
+          </div>
+          <h3>Oil Spills & Farmland</h3>
+          <p>
+            Crude pipeline rupture leaks, agricultural soil degradation, damaged fishing streams,
+            and blocked access roads preventing farm harvests.
+          </p>
+          <span className="card-launch-action">Report with AI &rarr;</span>
+        </button>
+
+        <button type="button" className="portal-card clickable" onClick={openAgent} title="Launch AI Officer to report water contamination">
+          <div className="portal-card-icon">
+            <Trees size={22} />
+          </div>
+          <h3>Water & Community Health</h3>
+          <p>
+            Contaminated boreholes and drinking water, chemical odors causing respiratory illness,
+            and industrial site disturbances in residential quarters.
+          </p>
+          <span className="card-launch-action">Report with AI &rarr;</span>
+        </button>
+      </div>
+
+      {/* How it works (Simple & Honest) */}
+      <section className="portal-steps">
+        <div className="portal-steps-head">
+          <h2>How It Works</h2>
+          <p className="muted" style={{ margin: 0, fontSize: "14px" }}>
+            A transparent 3-step process ensuring every community voice is documented and resolved.
+          </p>
+        </div>
+        <div className="portal-steps-grid">
+          <div className="step-item">
+            <span className="step-num">1</span>
+            <strong>Conversational Intake</strong>
+            <span>
+              Click the launcher to speak or type naturally. You can describe the issue in plain words
+              and attach photos or evidence directly in the chat.
+            </span>
+          </div>
+
+          <div className="step-item">
+            <span className="step-num">2</span>
+            <strong>Instant Verified Ticket</strong>
+            <span>
+              SwiftAgents logs your complaint directly to the system of record and issues an official Ticket ID badge
+              with a private 6-digit verification code.
+            </span>
+          </div>
+
+          <div className="step-item">
+            <span className="step-num">3</span>
+            <strong>Accountable Resolution</strong>
+            <span>
+              An assigned Community Liaison Officer investigates on-site under strict SLA countdowns, with verified
+              progress updates available anytime in chat.
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="portal-footer">
+        <div>Host Community Case Desk &copy; {new Date().getFullYear()} • Secure & Privacy Preserving</div>
+        <div>
+          <span>Integrated with SwiftAgents Conversational AI &amp; Neon Serverless Postgres</span>
+        </div>
+      </footer>
+
+      {/* In-Browser Tool Simulator Modal */}
+      {simModalOpen && (
+        <AiSimulatorModal
+          onClose={() => setSimModalOpen(false)}
+          onSuccess={(ticket) => {
+            setToast(`AI Grievance Logged: ${ticket.ticket_id}`);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Staff Operations Desk (Case Workspace)
+// ---------------------------------------------------------------------------
+
 function Workspace({ setToast }: { setToast: (message: string) => void }) {
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [stage, setStage] = useState<CaseStage | "">("");
   const [queue, setQueue] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState<CaseWithTimeline | null>(null);
   const [notes, setNotes] = useState<InvestigationNote[]>([]);
@@ -173,7 +376,7 @@ function Workspace({ setToast }: { setToast: (message: string) => void }) {
     setLoading(true);
     setError(null);
     try {
-      setCases(await listCases({ stage, queue }));
+      setCases(await listCases({ stage, queue, query: searchQuery || undefined }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load cases");
     } finally {
@@ -183,30 +386,34 @@ function Workspace({ setToast }: { setToast: (message: string) => void }) {
 
   async function loadSelected(id: string) {
     setSelectedId(id);
-    const [caseData, noteData, evidenceData, notificationData] = await Promise.all([
-      getCase(id),
-      getNotes(id),
-      getEvidence(id),
-      getCaseNotifications(id)
-    ]);
-    setSelected(caseData);
-    setNotes(noteData);
-    setEvidence(evidenceData);
-    setNotifications(notificationData);
+    try {
+      const [caseData, noteData, evidenceData, notificationData] = await Promise.all([
+        getCase(id),
+        getNotes(id),
+        getEvidence(id),
+        getCaseNotifications(id),
+      ]);
+      setSelected(caseData);
+      setNotes(noteData);
+      setEvidence(evidenceData);
+      setNotifications(notificationData);
+    } catch (caught) {
+      setToast("Failed to load case details");
+    }
   }
 
   useEffect(() => {
     refreshCases();
-  }, [stage, queue]);
+  }, [stage, queue, searchQuery]);
 
   const metrics = useMemo(
     () => [
-      ["Open", cases.filter((item) => item.stage !== "resolved").length, <FolderOpen />],
-      ["Investigation", cases.filter((item) => item.stage === "under_investigation").length, <Activity />],
-      ["Escalated", cases.filter((item) => item.stage === "escalated").length, <Siren />],
-      ["At risk", cases.filter((item) => item.sla_status === "at_risk").length, <Clock />],
-      ["Breached", cases.filter((item) => item.sla_status === "breached").length, <Gauge />],
-      ["Resolved", cases.filter((item) => item.stage === "resolved").length, <ShieldCheck />]
+      ["Open", cases.filter((item) => item.stage !== "resolved").length, <FolderOpen key="1" />],
+      ["Investigation", cases.filter((item) => item.stage === "under_investigation").length, <Activity key="2" />],
+      ["Escalated", cases.filter((item) => item.stage === "escalated").length, <Siren key="3" />],
+      ["At risk", cases.filter((item) => item.sla_status === "at_risk").length, <Clock key="4" />],
+      ["Breached", cases.filter((item) => item.sla_status === "breached").length, <Gauge key="5" />],
+      ["Resolved", cases.filter((item) => item.stage === "resolved").length, <ShieldCheck key="6" />],
     ],
     [cases]
   );
@@ -214,10 +421,14 @@ function Workspace({ setToast }: { setToast: (message: string) => void }) {
   return (
     <section className="view-stack">
       <PageHeader
-        kicker="Operations"
-        title="Case workspace"
-        copy="A single accountable queue for intake, assignment, investigation, response, SLA pressure and resolution."
-        action={<button className="button ghost" type="button" onClick={refreshCases}><RefreshCw />Refresh</button>}
+        kicker="Staff Operations Desk"
+        title="Case Control Room"
+        copy="A unified queue for triage, officer assignment, field investigation, responses, and official resolution."
+        action={
+          <button className="button ghost" type="button" onClick={refreshCases}>
+            <RefreshCw />Refresh
+          </button>
+        }
       />
       <div className="metric-grid">
         {metrics.map(([label, value, icon]) => (
@@ -231,18 +442,29 @@ function Workspace({ setToast }: { setToast: (message: string) => void }) {
       <div className="workspace-grid">
         <section className="panel">
           <div className="panel-head">
-            <h2>Queue</h2>
+            <h2>Grievance Queue</h2>
             <div className="filters">
+              <input
+                type="text"
+                placeholder="Search reference, location..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ padding: "6px 10px", fontSize: "13px", borderRadius: "6px", border: "1px solid var(--line)" }}
+              />
               <select value={stage} onChange={(event) => setStage(event.target.value as CaseStage | "")}>
                 <option value="">All stages</option>
                 {stageOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
                 ))}
               </select>
               <select value={queue} onChange={(event) => setQueue(event.target.value)}>
                 <option value="">All queues</option>
                 {queueOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -251,7 +473,11 @@ function Workspace({ setToast }: { setToast: (message: string) => void }) {
           {error && <EmptyState tone="danger" title="Queue unavailable" copy={error} />}
           {!loading && !error && (
             <ul className="case-list">
-              {cases.length === 0 && <li><EmptyState title="No matching cases" copy="Change the queue filters or create a complaint." /></li>}
+              {cases.length === 0 && (
+                <li>
+                  <EmptyState title="No matching cases" copy="Adjust your filters or submit a grievance in the public portal." />
+                </li>
+              )}
               {cases.map((item) => (
                 <li key={item.id}>
                   <button
@@ -261,7 +487,9 @@ function Workspace({ setToast }: { setToast: (message: string) => void }) {
                   >
                     <span>
                       <strong>{item.reference}</strong>
-                      <small>{item.category} in {item.location}</small>
+                      <small>
+                        {item.category} in {item.location}
+                      </small>
                     </span>
                     <span className="row-meta">
                       <Badge value={item.stage} />
@@ -296,7 +524,7 @@ function CaseDetailPanel({
   evidence,
   notifications,
   reload,
-  setToast
+  setToast,
 }: {
   selected: CaseWithTimeline | null;
   notes: InvestigationNote[];
@@ -313,30 +541,31 @@ function CaseDetailPanel({
   if (!selected) {
     return (
       <aside className="panel detail-panel">
-        <EmptyState title="Select a case" copy="Open a queue item to inspect the complaint, timeline, SLA state and next action." />
+        <EmptyState title="Select a case" copy="Select an item from the queue to inspect grievance facts, timeline, evidence, and actions." />
       </aside>
     );
   }
 
   const detail = selected.case;
+  const isAiSourced = detail.source_channel === "swiftagents_chat" || detail.source_channel === "swiftagents";
 
   async function assign() {
-    const officer = window.prompt("Officer name", detail.assigned_officer ?? "Current staff member");
+    const officer = window.prompt("Assign to Officer Name:", detail.assigned_officer ?? "Community Liaison Officer");
     if (!officer) return;
     await assignCase(detail.id, officer);
-    setToast("Case owner updated");
+    setToast("Case assigned");
     await reload();
   }
 
   async function transition(stage: CaseStage) {
     const payload: { stage: CaseStage; response_summary?: string; resolution_summary?: string } = { stage };
     if (stage === "response_issued") {
-      const response = window.prompt("Response summary");
+      const response = window.prompt("Official response summary to community member:");
       if (!response) return;
       payload.response_summary = response;
     }
     if (stage === "resolved") {
-      const resolution = window.prompt("Resolution summary");
+      const resolution = window.prompt("Final resolution summary:");
       if (!resolution) return;
       payload.resolution_summary = resolution;
     }
@@ -359,11 +588,11 @@ function CaseDetailPanel({
     if (!fileName.trim()) return;
     await addEvidence(detail.id, {
       file_name: fileName.trim(),
-      description: fileDescription.trim() || null
+      description: fileDescription.trim() || null,
     });
     setFileName("");
     setFileDescription("");
-    setToast("Evidence metadata saved");
+    setToast("Evidence registered");
     await reload();
   }
 
@@ -375,7 +604,10 @@ function CaseDetailPanel({
     <aside className="panel detail-panel">
       <div className="detail-hero">
         <div>
-          <p className="eyebrow">{detail.reference}</p>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+            <p className="eyebrow" style={{ margin: 0 }}>{detail.reference}</p>
+            {isAiSourced && <span className="ai-pill">SwiftAgents AI Intake</span>}
+          </div>
           <h2>{detail.category}</h2>
           <p>{detail.location}</p>
         </div>
@@ -388,47 +620,88 @@ function CaseDetailPanel({
       <div className="detail-grid">
         <Fact label="Complainant" value={detail.complainant_name} />
         <Fact label="Contact" value={detail.contact_value} />
+        <Fact label="Channel" value={detail.preferred_channel === "in_browser_chat" ? "In-Browser Chat (SwiftAgents)" : detail.preferred_channel} />
         <Fact label="Owner" value={detail.assigned_officer ?? "Unassigned"} />
         <Fact label="Priority" value={titleCase(detail.priority)} />
-        <Fact label="SLA due" value={formatDate(detail.sla_due_at)} />
+        <Fact label="SLA Due" value={formatDate(detail.sla_due_at)} />
         <Fact label="Age" value={`${detail.age_hours} hours`} />
+        {detail.status_verification_code && <Fact label="Verify Code" value={detail.status_verification_code} />}
       </div>
 
       <div className="content-block">
-        <h3>Complaint</h3>
+        <h3>Grievance Details</h3>
         <p>{detail.description}</p>
       </div>
       {detail.response_summary && <ContentBlock title="Response" copy={detail.response_summary} />}
       {detail.resolution_summary && <ContentBlock title="Resolution" copy={detail.resolution_summary} />}
 
       <div className="action-grid">
-        <button className="button ghost" type="button" onClick={assign}><CircleUserRound />Assign</button>
+        <button className="button ghost" type="button" onClick={assign}>
+          <CircleUserRound />Assign
+        </button>
         <NextStageButton stage={detail.stage} onTransition={transition} />
-        <button className="button warning" type="button" disabled={detail.stage === "resolved" || detail.stage === "escalated"} onClick={() => transition("escalated")}><Siren />Escalate</button>
-        <button className="button ghost" type="button" onClick={loadExport}><Download />Export</button>
+        <button
+          className="button warning"
+          type="button"
+          disabled={detail.stage === "resolved" || detail.stage === "escalated"}
+          onClick={() => transition("escalated")}
+        >
+          <Siren />Escalate
+        </button>
+        <button className="button ghost" type="button" onClick={loadExport}>
+          <Download />Export
+        </button>
       </div>
 
       <form className="inline-form" onSubmit={saveNote}>
-        <label htmlFor="note">Investigation note</label>
-        <textarea id="note" value={note} onChange={(event) => setNote(event.target.value)} />
-        <button className="button ghost" type="submit"><SquarePen />Save note</button>
+        <label htmlFor="note">Investigation Note</label>
+        <textarea id="note" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Record field findings or inspection remarks..." />
+        <button className="button ghost" type="submit">
+          <SquarePen />Save note
+        </button>
       </form>
 
       <form className="inline-form" onSubmit={saveEvidence}>
-        <label htmlFor="file-name">Evidence metadata</label>
-        <input id="file-name" value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="File name or reference" />
-        <input value={fileDescription} onChange={(event) => setFileDescription(event.target.value)} placeholder="Short description" />
-        <button className="button ghost" type="submit"><FileText />Save evidence</button>
+        <label htmlFor="file-name">Evidence Metadata</label>
+        <input id="file-name" value={fileName} onChange={(event) => setFileName(event.target.value)} placeholder="Photo or document file name" />
+        <input value={fileDescription} onChange={(event) => setFileDescription(event.target.value)} placeholder="Description or location tag" />
+        <button className="button ghost" type="submit">
+          <FileText />Save evidence
+        </button>
       </form>
 
-      <RecordSection title="Timeline" records={selected.events.map((event) => ({
-        id: `${event.event_type}-${event.occurred_at}`,
-        title: titleCase(event.event_type),
-        meta: `${event.actor} | ${formatDate(event.occurred_at)}`
-      }))} />
-      <RecordSection title="Notes" records={notes.map((item) => ({ id: item.id, title: item.note, meta: `${item.actor} | ${formatDate(item.created_at)}` }))} />
-      <RecordSection title="Evidence" records={evidence.map((item) => ({ id: item.id, title: item.file_name, meta: `${item.evidence_type} | ${item.description ?? "No description"}` }))} />
-      <RecordSection title="Notifications" records={notifications.map((item) => ({ id: item.id, title: titleCase(item.event_type), meta: `${item.channel} | ${titleCase(item.status)} | ${item.attempts} attempts` }))} />
+      <RecordSection
+        title="Audit Timeline"
+        records={selected.events.map((event) => ({
+          id: `${event.event_type}-${event.occurred_at}`,
+          title: titleCase(event.event_type),
+          meta: `${event.actor} | ${formatDate(event.occurred_at)}`,
+        }))}
+      />
+      <RecordSection
+        title="Investigation Notes"
+        records={notes.map((item) => ({
+          id: item.id,
+          title: item.note,
+          meta: `${item.actor} | ${formatDate(item.created_at)}`,
+        }))}
+      />
+      <RecordSection
+        title="Evidence Records"
+        records={evidence.map((item) => ({
+          id: item.id,
+          title: item.file_name,
+          meta: `${item.evidence_type} | ${item.description ?? "No description"}`,
+        }))}
+      />
+      <RecordSection
+        title="Notification Trail"
+        records={notifications.map((item) => ({
+          id: item.id,
+          title: titleCase(item.event_type),
+          meta: `${item.channel} | ${titleCase(item.status)} | ${item.attempts} attempts`,
+        }))}
+      />
       {caseExport && <pre className="export-box">{JSON.stringify(caseExport, null, 2)}</pre>}
     </aside>
   );
@@ -438,8 +711,8 @@ function NextStageButton({ stage, onTransition }: { stage: CaseStage; onTransiti
   const next: Partial<Record<CaseStage, { label: string; stage: CaseStage }>> = {
     reported: { label: "Start investigation", stage: "under_investigation" },
     under_investigation: { label: "Issue response", stage: "response_issued" },
-    response_issued: { label: "Resolve", stage: "resolved" },
-    escalated: { label: "Resume investigation", stage: "under_investigation" }
+    response_issued: { label: "Resolve case", stage: "resolved" },
+    escalated: { label: "Resume investigation", stage: "under_investigation" },
   };
   const action = next[stage];
   return (
@@ -450,108 +723,105 @@ function NextStageButton({ stage, onTransition }: { stage: CaseStage; onTransiti
   );
 }
 
-function Intake({ setToast }: { setToast: (message: string) => void }) {
-  const [result, setResult] = useState<{ reference: string; code: string } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+function AiSimulatorModal({
+  onClose,
+  onSuccess,
+}: {
+  onClose: () => void;
+  onSuccess: (res: SwiftAgentToolResponse) => void;
+}) {
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("Gas Flaring");
+  const [location, setLocation] = useState("Rumuekpe Community");
+  const [complainant, setComplainant] = useState("Madam Joy");
+  const [loading, setLoading] = useState(false);
+  const [response, setResponse] = useState<SwiftAgentToolResponse | null>(null);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    const form = Object.fromEntries(new FormData(event.currentTarget));
-    const payload = {
-      ...form,
-      occurred_at: form.occurred_at ? String(form.occurred_at) : undefined
-    } as Parameters<typeof createComplaint>[0];
-    const created = await createComplaint(payload).catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "Could not create case");
-      return null;
-    });
-    if (!created) return;
-    setResult({ reference: created.reference, code: created.status_verification_code });
-    setToast("Complaint recorded");
-    event.currentTarget.reset();
+  async function handleSimulate(e: FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const res = await agentSubmitComplaint({
+        complainant_name: complainant,
+        description,
+        category,
+        location,
+        preferred_channel: "in_browser_chat",
+      });
+      setResponse(res);
+      onSuccess(res);
+    } catch (err) {
+      alert("Failed to submit tool call");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
-    <section className="view-stack">
-      <PageHeader
-        kicker="Public intake"
-        title="Record a complaint"
-        copy="Capture the complaint once, issue a reference immediately, and create the audit and notification trail."
-      />
-      <section className="panel form-panel">
-        {error && <Notice tone="danger">{error}</Notice>}
-        {result && <Notice>Reference {result.reference}. Verification code {result.code}.</Notice>}
-        <form className="case-form" onSubmit={submit}>
-          <Field label="Complainant name" name="complainant_name" required minLength={2} />
-          <Field label="Contact detail" name="contact_value" required minLength={4} />
-          <SelectField label="Preferred channel" name="preferred_channel" options={["sms", "email", "whatsapp", "phone"]} />
-          <SelectField label="Priority" name="priority" options={["normal", "low", "high", "critical"]} />
-          <Field label="Category" name="category" required minLength={2} />
-          <Field label="Occurrence date" name="occurred_at" type="datetime-local" />
-          <Field label="Location or community" name="location" required minLength={2} wide />
-          <TextAreaField label="Complaint description" name="description" required minLength={10} wide />
-          <SelectField label="Intake source" name="source_channel" options={["web", "staff", "phone", "community_meeting", "swiftagents"]} />
-          <button className="button primary form-submit" type="submit"><Save />Create case</button>
-        </form>
-      </section>
-    </section>
-  );
-}
+    <div className="ai-sim-modal-backdrop" onClick={onClose}>
+      <div className="ai-sim-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="ai-sim-modal-header">
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Bot size={20} color="#11685f" />
+            <h3 style={{ margin: 0 }}>SwiftAgents In-Browser Tool Simulator</h3>
+          </div>
+          <button type="button" className="button ghost" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </div>
+        <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)" }}>
+          Simulates the natural language interaction where SwiftAgents executes <code>POST /v1/agent/complaints</code> and renders a ticket badge.
+        </p>
 
-function StatusLookup() {
-  const [status, setStatus] = useState<PublicStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError(null);
-    setStatus(null);
-    const form = Object.fromEntries(new FormData(event.currentTarget));
-    const result = await lookupStatus({
-      reference: String(form.reference),
-      verification_code: form.verification_code ? String(form.verification_code) : undefined,
-      contact_value: form.contact_value ? String(form.contact_value) : undefined
-    }).catch((caught) => {
-      setError(caught instanceof Error ? caught.message : "No verified case was found");
-      return null;
-    });
-    if (result) setStatus(result);
-  }
-
-  return (
-    <section className="view-stack">
-      <PageHeader
-        kicker="Public status"
-        title="Verified case lookup"
-        copy="Show only approved stage language after the person proves they know the reference and verification factor."
-      />
-      <div className="two-column">
-        <section className="panel form-panel">
-          {error && <Notice tone="danger">{error}</Notice>}
-          <form className="case-form single" onSubmit={submit}>
-            <Field label="Reference" name="reference" required />
-            <Field label="Verification code" name="verification_code" />
-            <Field label="Contact fallback" name="contact_value" />
-            <button className="button primary form-submit" type="submit"><Search />Check status</button>
+        {!response ? (
+          <form onSubmit={handleSimulate} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <label className="field">
+              <span>Complainant Name</span>
+              <input value={complainant} onChange={(e) => setComplainant(e.target.value)} required />
+            </label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <label className="field">
+                <span>Category</span>
+                <input value={category} onChange={(e) => setCategory(e.target.value)} required />
+              </label>
+              <label className="field">
+                <span>Location / Site</span>
+                <input value={location} onChange={(e) => setLocation(e.target.value)} required />
+              </label>
+            </div>
+            <label className="field">
+              <span>What happened? (Natural Language Message)</span>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe the flare heat, soot, pipeline leak, or blocked road..."
+                required
+                rows={3}
+              />
+            </label>
+            <button type="submit" className="button primary" disabled={loading}>
+              {loading ? "Agent Processing..." : "Execute AI Tool Call"}
+            </button>
           </form>
-        </section>
-        <section className="panel result-panel">
-          {!status && <EmptyState title="No lookup yet" copy="Enter a case reference and verification factor to view the public-safe status." />}
-          {status && (
-            <>
-              <div className="case-topline">
-                <strong>{status.reference}</strong>
-                <Badge value={status.stage} />
+        ) : (
+          <div className="ai-chat-preview">
+            <div className="ai-chat-msg user">
+              <span>{description}</span>
+            </div>
+            <div className="ai-chat-msg agent">
+              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                <span className="ai-pill">{response.badge.label}: {response.badge.value}</span>
+                <span style={{ fontSize: "11px", color: "var(--muted)" }}>Status: {response.status}</span>
               </div>
-              <p className="status-message">{status.status_message}</p>
-              <Badge value={status.sla_status} />
-              <p className="muted">Updated {formatDate(status.updated_at)}</p>
-            </>
-          )}
-        </section>
+              <p style={{ margin: 0, whiteSpace: "pre-line" }}>{response.message}</p>
+            </div>
+            <button type="button" className="button ghost" onClick={() => setResponse(null)} style={{ alignSelf: "center", marginTop: "8px" }}>
+              Test Another Tool Call
+            </button>
+          </div>
+        )}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -579,43 +849,52 @@ function Reports() {
         ["Unassigned", report.unassigned_cases],
         ["Escalated", report.escalated_cases],
         ["At risk", report.at_risk_cases],
-        ["Breached", report.breached_cases]
+        ["Breached", report.breached_cases],
+        ["Resolved", report.resolved_cases],
       ]
     : [];
 
   return (
     <section className="view-stack">
       <PageHeader
-        kicker="Management"
-        title="Portfolio report"
-        copy="Identify open, ageing, unassigned, escalated and SLA-risk work without leaving the case system."
-        action={<button className="button ghost" type="button" onClick={loadReport}><RefreshCw />Refresh</button>}
+        kicker="Executive Analytics"
+        title="Grievance Analytics & Trends"
+        copy="Grievance volume, stage distribution, SLA compliance, and environmental category breakdowns."
+        action={
+          <button className="button ghost" type="button" onClick={loadReport}>
+            <RefreshCw />Refresh
+          </button>
+        }
       />
       {error && <Notice tone="danger">{error}</Notice>}
-      {!report && !error && <SkeletonRows />}
+      <div className="metric-grid compact">
+        {metrics.map(([label, value]) => (
+          <div className="metric" key={String(label)}>
+            <strong>{value}</strong>
+            <small>{label}</small>
+          </div>
+        ))}
+      </div>
       {report && (
-        <>
-          <div className="metric-grid">
-            {metrics.map(([label, value]) => (
-              <div className="metric" key={String(label)}>
-                <span><BarChart3 /></span>
-                <strong>{value}</strong>
-                <small>{label}</small>
-              </div>
-            ))}
-          </div>
-          <div className="three-column">
-            <Breakdown title="By stage" data={report.by_stage} />
-            <Breakdown title="By priority" data={report.by_priority} />
-            <Breakdown title="By category" data={report.by_category} />
-          </div>
-        </>
+        <div className="report-grid">
+          <ReportSection title="Cases by Stage" counts={report.by_stage} />
+          <ReportSection title="Cases by Priority" counts={report.by_priority} />
+          <ReportSection title="Cases by Category" counts={report.by_category} />
+        </div>
       )}
     </section>
   );
 }
 
-function IntegrationMonitor({ setToast }: { setToast: (message: string) => void }) {
+function IntegrationMonitor({
+  setToast,
+  openAgent,
+  config,
+}: {
+  setToast: (message: string) => void;
+  openAgent: () => void;
+  config: ReturnType<typeof useSwiftAgent>["config"];
+}) {
   const [handoffs, setHandoffs] = useState<Handoff[]>([]);
   const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -646,20 +925,64 @@ function IntegrationMonitor({ setToast }: { setToast: (message: string) => void 
     <section className="view-stack">
       <PageHeader
         kicker="Reliability"
-        title="Integration monitor"
-        copy="Every external handoff is visible and retryable; case state remains authoritative in the backend."
-        action={<button className="button ghost" type="button" onClick={load}><RefreshCw />Refresh</button>}
+        title="SwiftAgents Integration Hub"
+        copy="Real-time monitoring of SwiftAgents conversational handoffs, webhooks, and outbound notification events."
+        action={
+          <button className="button ghost" type="button" onClick={load}>
+            <RefreshCw />Refresh
+          </button>
+        }
       />
       {error && <Notice tone="danger">{error}</Notice>}
+
+      <section className="panel" style={{ padding: "18px 22px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <Bot size={22} color="#11685f" />
+            <h3 style={{ margin: 0 }}>SwiftAgents Runtime Status</h3>
+          </div>
+          <span className="ai-pill">{config?.mock_mode ? "Mock Sandbox Mode" : "Live Cloud Active"}</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", fontSize: "13px" }}>
+          <div>
+            <span className="muted" style={{ display: "block" }}>Company ID</span>
+            <code>{config?.company_id ?? "Not configured"}</code>
+          </div>
+          <div>
+            <span className="muted" style={{ display: "block" }}>Public Widget Key</span>
+            <code>{config?.public_key ? `${config.public_key.slice(0, 12)}...` : "None"}</code>
+          </div>
+          <div>
+            <span className="muted" style={{ display: "block" }}>Widget CDN URL</span>
+            <span style={{ color: "var(--accent)" }}>widget.swiftagents.org</span>
+          </div>
+          <div>
+            <span className="muted" style={{ display: "block" }}>Agent Tool Endpoint</span>
+            <code>POST /v1/agent/complaints</code>
+          </div>
+        </div>
+        <div style={{ marginTop: "14px", display: "flex", gap: "10px" }}>
+          <button type="button" className="button secondary" onClick={openAgent}>
+            <Bot size={16} /> Open Test Widget
+          </button>
+        </div>
+      </section>
+
       <div className="two-column">
-        <EventPanel title="SwiftAgents handoffs" rows={handoffs} type="handoff" retry={retry} />
-        <EventPanel title="Notification events" rows={notifications} type="notification" retry={retry} />
+        <EventPanel title="SwiftAgents Handoffs" rows={handoffs} type="handoff" retry={retry} />
+        <EventPanel title="Notification Events" rows={notifications} type="notification" retry={retry} />
       </div>
     </section>
   );
 }
 
-function Settings({ setToast }: { setToast: (message: string) => void }) {
+function Settings({
+  setToast,
+  config,
+}: {
+  setToast: (message: string) => void;
+  config: ReturnType<typeof useSwiftAgent>["config"];
+}) {
   const [staffKey, setStaffKey] = useState(localStorage.getItem("staffApiKey") ?? "");
 
   function save(event: FormEvent) {
@@ -672,20 +995,42 @@ function Settings({ setToast }: { setToast: (message: string) => void }) {
   return (
     <section className="view-stack">
       <PageHeader
-        kicker="Access"
-        title="Frontend settings"
-        copy="Store a staff API key locally when the backend is configured to require one."
+        kicker="Configuration"
+        title="Settings & Credentials"
+        copy="Manage staff access keys and inspect Neon Postgres & SwiftAgents credentials."
       />
-      <section className="panel form-panel">
-        <form className="case-form single" onSubmit={save}>
-          <label className="field">
-            <span>Staff API key</span>
-            <input value={staffKey} onChange={(event) => setStaffKey(event.target.value)} type="password" autoComplete="off" />
-            <small>Sent as X-Staff-Key for protected staff endpoints.</small>
-          </label>
-          <button className="button primary form-submit" type="submit"><Save />Save settings</button>
-        </form>
-      </section>
+      <div className="two-column">
+        <section className="panel form-panel">
+          <h3>Staff Authentication</h3>
+          <form className="case-form single" onSubmit={save}>
+            <label className="field">
+              <span>Staff API Key</span>
+              <input value={staffKey} onChange={(event) => setStaffKey(event.target.value)} type="password" autoComplete="off" placeholder="Leave empty for local development" />
+              <small>Sent as X-Staff-Key header to authorize case operations.</small>
+            </label>
+            <button className="button primary form-submit" type="submit">
+              <Save />Save settings
+            </button>
+          </form>
+        </section>
+
+        <section className="panel" style={{ padding: "20px" }}>
+          <h3>Environment Credentials Guide</h3>
+          <p style={{ fontSize: "13px", color: "var(--muted)", lineHeight: "1.5" }}>
+            Production secrets are loaded securely from your backend <code>.env</code> file:
+          </p>
+          <pre style={{ background: "var(--surface-soft)", padding: "12px", borderRadius: "8px", fontSize: "12px", border: "1px solid var(--line)" }}>
+{`# Database (Neon Serverless Postgres)
+DATABASE_URL="postgresql+asyncpg://user:pass@ep-xxxx-pooler.neon.tech/db?sslmode=require"
+NEON_API_KEY="your-neon-api-key"
+
+# SwiftAgents
+SWIFTAGENTS_COMPANY_ID="${config?.company_id ?? "your-company-uuid"}"
+SWIFTAGENTS_PUBLIC_KEY="${config?.public_key ?? "swa_live_..."}"
+SWIFTAGENTS_AGENT_KEY="your-server-agent-key"`}
+          </pre>
+        </section>
+      </div>
     </section>
   );
 }
@@ -703,55 +1048,13 @@ function PageHeader({ kicker, title, copy, action }: { kicker: string; title: st
   );
 }
 
-function Field(props: {
-  label: string;
-  name: string;
-  required?: boolean;
-  minLength?: number;
-  type?: string;
-  wide?: boolean;
-}) {
-  return (
-    <label className={props.wide ? "field wide" : "field"}>
-      <span>{props.label}</span>
-      <input name={props.name} required={props.required} minLength={props.minLength} type={props.type ?? "text"} />
-    </label>
-  );
-}
-
-function TextAreaField(props: { label: string; name: string; required?: boolean; minLength?: number; wide?: boolean }) {
-  return (
-    <label className={props.wide ? "field wide" : "field"}>
-      <span>{props.label}</span>
-      <textarea name={props.name} required={props.required} minLength={props.minLength} />
-    </label>
-  );
-}
-
-function SelectField({ label, name, options }: { label: string; name: string; options: string[] }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <select name={name}>
-        {options.map((option) => (
-          <option key={option} value={option}>{titleCase(option)}</option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div className="fact">
-      <span>{label}</span>
+      <small>{label}</small>
       <strong>{value}</strong>
     </div>
   );
-}
-
-function Badge({ value }: { value: string }) {
-  return <span className={`badge ${value}`}>{titleCase(value)}</span>;
 }
 
 function ContentBlock({ title, copy }: { title: string; copy: string }) {
@@ -766,84 +1069,105 @@ function ContentBlock({ title, copy }: { title: string; copy: string }) {
 function RecordSection({ title, records }: { title: string; records: { id: string; title: string; meta: string }[] }) {
   return (
     <section className="record-section">
-      <h3>{title}</h3>
-      {records.length === 0 && <p className="muted">No records yet.</p>}
-      {records.map((record) => (
-        <div className="record" key={record.id}>
-          <strong>{record.title}</strong>
-          <small>{record.meta}</small>
-        </div>
-      ))}
+      <div className="section-head">
+        <h3>{title}</h3>
+        <span className="count-pill">{records.length}</span>
+      </div>
+      {records.length === 0 && <p className="muted small">No records yet.</p>}
+      <ul className="record-list">
+        {records.map((item) => (
+          <li className="record" key={item.id}>
+            <strong>{item.title}</strong>
+            <small>{item.meta}</small>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
 
-function EventPanel({
+function ReportSection({ title, counts }: { title: string; counts: Record<string, number> }) {
+  const rows = Object.entries(counts);
+  return (
+    <section className="panel report-panel">
+      <h3>{title}</h3>
+      {rows.length === 0 && <p className="muted">No data available.</p>}
+      <ul className="breakdown-list">
+        {rows.map(([key, count]) => (
+          <li className="breakdown-row" key={key}>
+            <span>{titleCase(key)}</span>
+            <strong>{count}</strong>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function EventPanel<T extends Handoff | NotificationEvent>({
   title,
   rows,
   type,
-  retry
+  retry,
 }: {
   title: string;
-  rows: Array<Handoff | NotificationEvent>;
+  rows: T[];
   type: "handoff" | "notification";
   retry: (type: "handoff" | "notification", id: string) => Promise<void>;
 }) {
   return (
     <section className="panel event-panel">
-      <div className="panel-head"><h2>{title}</h2></div>
-      {rows.length === 0 && <EmptyState title="No events" copy="Events will appear when cases are created or changed." />}
-      {rows.map((row) => (
-        <div className="event-row" key={row.id}>
-          <div>
-            <strong>{titleCase(row.event_type)}</strong>
-            <small>{titleCase(row.status)} | {row.attempts} attempts</small>
-            {row.error_message && <small className="danger-text">{row.error_message}</small>}
-          </div>
-          <button className="button ghost compact" type="button" onClick={() => retry(type, row.id)}>
-            <RefreshCw />Retry
-          </button>
-        </div>
-      ))}
+      <div className="panel-head">
+        <h3>{title}</h3>
+        <span className="count-pill">{rows.length}</span>
+      </div>
+      {rows.length === 0 && <EmptyState title="No events" copy="No external delivery attempts recorded yet." />}
+      <ul className="event-list">
+        {rows.map((row) => (
+          <li className="event-row" key={row.id}>
+            <div>
+              <strong>{titleCase(row.event_type)}</strong>
+              <small>{formatDate(row.created_at)}</small>
+              {"channel" in row && <small>{row.channel}: {row.recipient}</small>}
+              {"message" in row && <p className="event-message">{row.message}</p>}
+              {row.error_message && <p className="error-copy">{row.error_message}</p>}
+            </div>
+            <div className="event-actions">
+              <Badge value={row.status} />
+              <button className="button ghost small" type="button" onClick={() => retry(type, row.id)}>
+                Retry
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
 
-function Breakdown({ title, data }: { title: string; data: Record<string, number> }) {
-  const rows = Object.entries(data);
-  return (
-    <section className="panel breakdown">
-      <div className="panel-head"><h2>{title}</h2></div>
-      {rows.length === 0 && <EmptyState title="No data" copy="Create cases to populate this view." />}
-      {rows.map(([key, value]) => (
-        <div className="breakdown-row" key={key}>
-          <span>{titleCase(key)}</span>
-          <strong>{value}</strong>
-        </div>
-      ))}
-    </section>
-  );
+function Badge({ value }: { value: string }) {
+  return <span className={`badge ${value}`}>{titleCase(value)}</span>;
 }
 
-function EmptyState({ title, copy, tone }: { title: string; copy: string; tone?: "danger" }) {
+function Notice({ children, tone = "accent" }: { children: React.ReactNode; tone?: "accent" | "danger" }) {
+  return <div className={`notice ${tone}`}>{children}</div>;
+}
+
+function EmptyState({ title, copy, tone = "default" }: { title: string; copy: string; tone?: "default" | "danger" }) {
   return (
-    <div className={tone === "danger" ? "empty-state danger" : "empty-state"}>
+    <div className={`empty-state ${tone}`}>
       <strong>{title}</strong>
       <p>{copy}</p>
     </div>
   );
 }
 
-function Notice({ children, tone }: { children: React.ReactNode; tone?: "danger" }) {
-  return <div className={tone === "danger" ? "notice danger" : "notice"}>{children}</div>;
-}
-
 function SkeletonRows() {
   return (
-    <div className="skeleton-stack" aria-label="Loading">
-      <span />
-      <span />
-      <span />
+    <div className="skeleton-stack" aria-hidden="true">
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
     </div>
   );
 }

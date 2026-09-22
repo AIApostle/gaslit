@@ -5,7 +5,7 @@ export type CaseStage =
   | "resolved"
   | "escalated";
 
-export type ContactChannel = "sms" | "email" | "whatsapp" | "phone";
+export type ContactChannel = "sms" | "email" | "whatsapp" | "phone" | "in_browser_chat" | "chat";
 
 export type SlaStatus = "on_track" | "at_risk" | "breached" | "resolved";
 
@@ -122,3 +122,38 @@ export type CaseExport = {
   evidence: Evidence[];
   notifications: NotificationEvent[];
 };
+
+export type SwiftAgentConfig = {
+  enabled: boolean;
+  company_id: string;
+  public_key: string;
+  widget_url: string;
+  api_base_url: string;
+  mock_mode: boolean;
+};
+
+export type SwiftAgentToolResponse = {
+  ticket_id: string;
+  status: string;
+  verification_code: string;
+  message: string;
+  badge: { label: string; value: string };
+};
+
+declare global {
+  interface Window {
+    SwiftAgentWidget?: {
+      mount: (companyId: string, options?: {
+        baseUrl?: string;
+        apiKey?: string;
+        mode?: "widget" | "button";
+        trigger?: string;
+      }) => void;
+      unmount: () => void;
+      open: () => void;
+      close: () => void;
+      toggle: () => void;
+      readonly isLoaded: boolean;
+    };
+  }
+}

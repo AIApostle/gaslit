@@ -4,12 +4,22 @@ import urllib.error
 import urllib.request
 import uuid
 from datetime import UTC, datetime, timedelta
-from sqlite3 import Row
+from typing import Any
 
 from fastapi import HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from .config import settings
-from .database import connection
+from .models import (
+    AgentHandoff,
+    Case,
+    CaseEvent,
+    Evidence,
+    InvestigationNote,
+    NotificationEvent,
+)
 from .schemas import (
     CaseAssignment,
     CaseDetail,
@@ -17,6 +27,7 @@ from .schemas import (
     CaseStage,
     CaseSummary,
     CaseTransition,
+    CaseWithTimeline,
     ComplaintIntake,
     ContactChannel,
     EventView,
@@ -27,9 +38,12 @@ from .schemas import (
     InvestigationNoteView,
     NotificationView,
     PortfolioReport,
+    PublicCaseStatus,
     SlaStatus,
+    StatusLookup,
+    SwiftAgentComplaintInput,
+    SwiftAgentToolResponse,
 )
-
 
 ALLOWED_TRANSITIONS = {
     CaseStage.REPORTED: {CaseStage.UNDER_INVESTIGATION, CaseStage.ESCALATED},
@@ -51,11 +65,11 @@ SLA_TARGETS = {
 }
 
 PUBLIC_STATUS_MESSAGES = {
-    CaseStage.REPORTED: "Your complaint has been received and is being reviewed.",
-    CaseStage.UNDER_INVESTIGATION: "Your case is currently under investigation.",
-    CaseStage.RESPONSE_ISSUED: "A response has been issued for your case.",
-    CaseStage.RESOLVED: "Your case has been resolved.",
-    CaseStage.ESCALATED: "Your case requires additional review and remains actively tracked.",
+    CaseStage.REPORTED: "Your complaint has been received and is being reviewed by community liaison officers.",
+    CaseStage.UNDER_INVESTIGATION: "Your case is currently under active field investigation.",
+    CaseStage.RESPONSE_ISSUED: "An official response has been issued for your grievance.",
+    CaseStage.RESOLVED: "Your case has been formally resolved and documented.",
+    CaseStage.ESCALATED: "Your case has been escalated for high-priority executive review.",
 }
 
 
@@ -63,21 +77,24 @@ def now_dt() -> datetime:
     return datetime.now(UTC)
 
 
-def now() -> str:
+def now_iso() -> str:
     return now_dt().isoformat()
 
 
-def parse_dt(value: str | None) -> datetime | None:
+def parse_dt(value: str | datetime | None) -> datetime | None:
     if not value:
         return None
-    return datetime.fromisoformat(value)
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    dt = datetime.fromisoformat(value)
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
-def reference() -> str:
+def generate_reference() -> str:
     return f"HCC-{datetime.now(UTC):%Y%m%d}-{secrets.token_hex(4).upper()}"
 
 
-def verification_code() -> str:
+def generate_verification_code() -> str:
     return f"{secrets.randbelow(900000) + 100000}"
 
 
@@ -88,13 +105,12 @@ def sla_times(priority: str, created_at: datetime) -> tuple[str, str]:
     return warning.isoformat(), due.isoformat()
 
 
-def sla_status(row: Row | dict[str, object]) -> SlaStatus:
-    stage = row["stage"]
-    if stage == CaseStage.RESOLVED.value:
+def calculate_sla_status(case: Case) -> SlaStatus:
+    if case.stage == CaseStage.RESOLVED.value:
         return SlaStatus.RESOLVED
     current = now_dt()
-    warning_at = parse_dt(row["sla_warning_at"])
-    due_at = parse_dt(row["sla_due_at"])
+    due_at = parse_dt(case.sla_due_at)
+    warning_at = parse_dt(case.sla_warning_at)
     if due_at and current >= due_at:
         return SlaStatus.BREACHED
     if warning_at and current >= warning_at:
@@ -102,492 +118,720 @@ def sla_status(row: Row | dict[str, object]) -> SlaStatus:
     return SlaStatus.ON_TRACK
 
 
-def age_hours(row: Row | dict[str, object]) -> float:
-    created = parse_dt(row["created_at"])
-    if not created:
-        return 0
-    end = parse_dt(row["resolved_at"]) or now_dt()
-    return round((end - created).total_seconds() / 3600, 1)
+def calculate_age_hours(created_at: str | datetime) -> float:
+    dt = parse_dt(created_at)
+    if not dt:
+        return 0.0
+    return round(max(0.0, (now_dt() - dt).total_seconds() / 3600), 1)
 
 
-def case_payload(row: Row, include_verification_code: bool = False) -> dict[str, object]:
-    payload = dict(row)
-    payload["age_hours"] = age_hours(row)
-    payload["sla_status"] = sla_status(row)
-    if not include_verification_code:
-        payload["status_verification_code"] = None
-    return payload
-
-
-def serialize_case(row: Row, include_verification_code: bool = False) -> CaseDetail:
-    return CaseDetail(**case_payload(row, include_verification_code))
-
-
-def event(db, case_id: str, event_type: str, actor: str, metadata: dict[str, object]) -> None:
-    db.execute(
-        "INSERT INTO case_events VALUES (?, ?, ?, ?, ?, ?)",
-        (str(uuid.uuid4()), case_id, event_type, actor, now(), json.dumps(metadata)),
+def case_to_detail(case: Case) -> CaseDetail:
+    created = parse_dt(case.created_at) or now_dt()
+    updated = parse_dt(case.updated_at) or now_dt()
+    return CaseDetail(
+        id=case.id,
+        reference=case.reference,
+        category=case.category,
+        location=case.location,
+        stage=CaseStage(case.stage),
+        priority=case.priority,
+        assigned_officer=case.assigned_officer,
+        created_at=created,
+        updated_at=updated,
+        age_hours=calculate_age_hours(created),
+        sla_status=calculate_sla_status(case),
+        sla_warning_at=parse_dt(case.sla_warning_at),
+        sla_due_at=parse_dt(case.sla_due_at),
+        complainant_name=case.complainant_name,
+        contact_value=case.contact_value,
+        preferred_channel=ContactChannel(case.preferred_channel),
+        description=case.description,
+        occurred_at=parse_dt(case.occurred_at),
+        source_channel=case.source_channel,
+        response_summary=case.response_summary,
+        resolution_summary=case.resolution_summary,
+        resolved_at=parse_dt(case.resolved_at),
+        status_verification_code=case.status_verification_code,
     )
 
 
-def handoff(db, case_id: str, event_type: str, payload: dict[str, object]) -> None:
-    db.execute(
-        """
-        INSERT INTO agent_handoffs
-        (id, case_id, event_type, payload_json, status, attempts, created_at)
-        VALUES (?, ?, ?, ?, 'pending', 0, ?)
-        """,
-        (str(uuid.uuid4()), case_id, event_type, json.dumps(payload), now()),
+def case_to_summary(case: Case) -> CaseSummary:
+    created = parse_dt(case.created_at) or now_dt()
+    updated = parse_dt(case.updated_at) or now_dt()
+    return CaseSummary(
+        id=case.id,
+        reference=case.reference,
+        category=case.category,
+        location=case.location,
+        stage=CaseStage(case.stage),
+        priority=case.priority,
+        assigned_officer=case.assigned_officer,
+        created_at=created,
+        updated_at=updated,
+        age_hours=calculate_age_hours(created),
+        sla_status=calculate_sla_status(case),
+        sla_warning_at=parse_dt(case.sla_warning_at),
+        sla_due_at=parse_dt(case.sla_due_at),
     )
 
 
-def notification(
-    db,
-    case_id: str,
-    event_type: str,
-    channel: ContactChannel,
-    recipient: str,
-    message: str,
-    idempotency_key: str,
-) -> None:
-    db.execute(
-        """
-        INSERT OR IGNORE INTO notification_events
-        (id, case_id, event_type, channel, recipient, message, status, attempts, created_at, idempotency_key)
-        VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)
-        """,
-        (
-            str(uuid.uuid4()),
-            case_id,
-            event_type,
-            channel.value,
-            recipient,
-            message,
-            now(),
-            idempotency_key,
-        ),
-    )
-
-
-def get_case_or_404(case_id: str) -> Row:
-    with connection() as db:
-        case = db.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone()
-    if case is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Case not found")
-    return case
-
-
-def create_case(payload: ComplaintIntake, actor: str) -> CaseDetail:
+async def create_case(payload: ComplaintIntake, session: AsyncSession, actor: str = "community_member") -> CaseDetail:
     case_id = str(uuid.uuid4())
-    created = now_dt()
-    case_reference = reference()
-    code = verification_code()
-    warning_at, due_at = sla_times(payload.priority, created)
-    with connection() as db:
-        db.execute(
-            """
-            INSERT INTO cases
-            (id, reference, status_verification_code, complainant_name, contact_value,
-             preferred_channel, category, description, location, occurred_at, source_channel,
-             stage, priority, assigned_officer, response_summary, resolution_summary,
-             sla_warning_at, sla_due_at, created_at, updated_at, resolved_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                case_id,
-                case_reference,
-                code,
-                payload.complainant_name.strip(),
-                payload.contact_value,
-                payload.preferred_channel.value,
-                payload.category.strip(),
-                payload.description.strip(),
-                payload.location.strip(),
-                payload.occurred_at.isoformat() if payload.occurred_at else None,
-                payload.source_channel,
-                CaseStage.REPORTED.value,
-                payload.priority,
-                None,
-                None,
-                None,
-                warning_at,
-                due_at,
-                created.isoformat(),
-                created.isoformat(),
-                None,
-            ),
-        )
-        message = (
-            f"Complaint {case_reference} has been received. "
-            f"Use verification code {code} to check status."
-        )
-        event(db, case_id, "case_created", actor, {"stage": CaseStage.REPORTED.value, "source": payload.source_channel})
-        handoff(db, case_id, "case_created", {"reference": case_reference, "stage": CaseStage.REPORTED.value})
-        notification(
-            db,
-            case_id,
-            "case_created",
-            payload.preferred_channel,
-            payload.contact_value,
-            message,
-            f"{case_id}:case_created:{payload.preferred_channel.value}",
-        )
-        row = db.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone()
-    return serialize_case(row, include_verification_code=True)
+    ref = generate_reference()
+    v_code = generate_verification_code()
+    created_dt = now_dt()
+    warning_at, due_at = sla_times(payload.priority, created_dt)
+
+    case = Case(
+        id=case_id,
+        reference=ref,
+        status_verification_code=v_code,
+        complainant_name=payload.complainant_name,
+        contact_value=payload.contact_value,
+        preferred_channel=payload.preferred_channel.value,
+        category=payload.category,
+        description=payload.description,
+        location=payload.location,
+        occurred_at=payload.occurred_at.isoformat() if payload.occurred_at else None,
+        source_channel=payload.source_channel,
+        stage=CaseStage.REPORTED.value,
+        priority=payload.priority,
+        assigned_officer=None,
+        sla_warning_at=warning_at,
+        sla_due_at=due_at,
+        created_at=created_dt.isoformat(),
+        updated_at=created_dt.isoformat(),
+    )
+    session.add(case)
+
+    # Initial event
+    event = CaseEvent(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="complaint_logged",
+        actor=actor,
+        occurred_at=created_dt.isoformat(),
+        metadata_json=json.dumps({
+            "source": payload.source_channel,
+            "category": payload.category,
+            "priority": payload.priority,
+            "channel": payload.preferred_channel.value,
+        }),
+    )
+    session.add(event)
+
+    # Acknowledgement Notification
+    ack_msg = (
+        f"Complaint received. Reference: {ref}. "
+        f"Verification code: {v_code}. Status: {PUBLIC_STATUS_MESSAGES[CaseStage.REPORTED]}"
+    )
+    notification = NotificationEvent(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="complaint_acknowledged",
+        channel=payload.preferred_channel.value,
+        recipient=payload.contact_value,
+        message=ack_msg,
+        status="delivered" if payload.preferred_channel == ContactChannel.IN_BROWSER_CHAT else "pending",
+        idempotency_key=f"{case_id}-ack",
+        created_at=created_dt.isoformat(),
+    )
+    session.add(notification)
+
+    # SwiftAgents Handoff / Webhook event
+    handoff_payload = {
+        "case_id": case_id,
+        "reference": ref,
+        "category": payload.category,
+        "stage": CaseStage.REPORTED.value,
+        "source": payload.source_channel,
+        "verification_code": v_code,
+    }
+    handoff = AgentHandoff(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="case_created",
+        payload_json=json.dumps(handoff_payload),
+        status="pending",
+        created_at=created_dt.isoformat(),
+    )
+    session.add(handoff)
+
+    await session.commit()
+    await session.refresh(case)
+    return case_to_detail(case)
 
 
-def list_cases(stage: CaseStage | None = None, queue: str | None = None) -> list[CaseSummary]:
-    query = "SELECT * FROM cases"
-    clauses: list[str] = []
-    params: list[str] = []
+async def handle_agent_complaint(payload: SwiftAgentComplaintInput, session: AsyncSession) -> SwiftAgentToolResponse:
+    intake = ComplaintIntake(
+        complainant_name=payload.complainant_name,
+        contact_value=payload.contact_value,
+        preferred_channel=payload.preferred_channel,
+        category=payload.category,
+        description=payload.description,
+        location=payload.location,
+        occurred_at=payload.occurred_at,
+        source_channel="swiftagents_chat",
+        priority=payload.priority,
+    )
+    detail = await create_case(intake, session=session, actor="swiftagents_ai")
+    msg = (
+        f"Grievance recorded successfully!\n\n"
+        f"• **Ticket ID**: `{detail.reference}`\n"
+        f"• **Verification Code**: `{detail.status_verification_code}`\n"
+        f"• **Stage**: {PUBLIC_STATUS_MESSAGES[CaseStage.REPORTED]}\n\n"
+        f"Keep your verification code safe to check progress anytime."
+    )
+    return SwiftAgentToolResponse(
+        ticket_id=detail.reference,
+        status=detail.stage.value,
+        verification_code=detail.status_verification_code or "",
+        message=msg,
+        badge={"label": "Ticket ID", "value": detail.reference},
+    )
+
+
+async def public_status(lookup: StatusLookup, session: AsyncSession) -> PublicCaseStatus:
+    stmt = select(Case).where(Case.reference == lookup.reference.strip())
+    result = await session.execute(stmt)
+    case = result.scalar_one_or_none()
+
+    if not case:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Case reference not found")
+
+    code_match = (
+        bool(lookup.verification_code)
+        and lookup.verification_code.strip() == case.status_verification_code.strip()
+    )
+    contact_match = (
+        bool(lookup.contact_value)
+        and lookup.contact_value.strip().lower() == case.contact_value.strip().lower()
+    )
+
+    if not (code_match or contact_match):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invalid verification code or contact details")
+
+    stage_enum = CaseStage(case.stage)
+    updated_dt = parse_dt(case.updated_at) or now_dt()
+    return PublicCaseStatus(
+        reference=case.reference,
+        stage=stage_enum,
+        status_message=PUBLIC_STATUS_MESSAGES.get(stage_enum, "Your case is actively being processed."),
+        updated_at=updated_dt,
+        sla_status=calculate_sla_status(case),
+    )
+
+
+async def list_cases(
+    session: AsyncSession,
+    stage: str | None = None,
+    queue: str | None = None,
+    query: str | None = None,
+) -> list[CaseSummary]:
+    stmt = select(Case).order_by(Case.created_at.desc())
+
     if stage:
-        clauses.append("stage = ?")
-        params.append(stage.value)
+        stmt = stmt.where(Case.stage == stage)
+
+    if query:
+        term = f"%{query.strip()}%"
+        stmt = stmt.where(
+            (Case.reference.ilike(term))
+            | (Case.category.ilike(term))
+            | (Case.location.ilike(term))
+            | (Case.description.ilike(term))
+        )
+
+    result = await session.execute(stmt)
+    cases = result.scalars().all()
+
+    summaries = [case_to_summary(c) for c in cases]
+
+    if queue == "open":
+        return [s for s in summaries if s.stage != CaseStage.RESOLVED]
     if queue == "unassigned":
-        clauses.append("assigned_officer IS NULL")
-        clauses.append("stage != ?")
-        params.append(CaseStage.RESOLVED.value)
-    elif queue == "open":
-        clauses.append("stage != ?")
-        params.append(CaseStage.RESOLVED.value)
-    elif queue == "escalated":
-        clauses.append("stage = ?")
-        params.append(CaseStage.ESCALATED.value)
-    if clauses:
-        query += " WHERE " + " AND ".join(clauses)
-    query += " ORDER BY created_at DESC"
-    with connection() as db:
-        rows = db.execute(query, tuple(params)).fetchall()
-    summaries = [CaseSummary(**case_payload(row)) for row in rows]
+        return [s for s in summaries if not s.assigned_officer and s.stage != CaseStage.RESOLVED]
     if queue == "at_risk":
-        return [case for case in summaries if case.sla_status in {SlaStatus.AT_RISK, SlaStatus.BREACHED}]
+        return [s for s in summaries if s.sla_status == SlaStatus.AT_RISK and s.stage != CaseStage.RESOLVED]
     if queue == "breached":
-        return [case for case in summaries if case.sla_status == SlaStatus.BREACHED]
+        return [s for s in summaries if s.sla_status == SlaStatus.BREACHED and s.stage != CaseStage.RESOLVED]
+    if queue == "escalated":
+        return [s for s in summaries if s.stage == CaseStage.ESCALATED]
+
     return summaries
 
 
-def assign_case(case_id: str, payload: CaseAssignment, actor: str) -> CaseDetail:
-    get_case_or_404(case_id)
-    timestamp = now()
-    with connection() as db:
-        db.execute(
-            "UPDATE cases SET assigned_officer = ?, updated_at = ? WHERE id = ?",
-            (payload.assigned_officer.strip(), timestamp, case_id),
-        )
-        event(db, case_id, "case_assigned", actor, {"assigned_officer": payload.assigned_officer.strip()})
-        row = db.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone()
-    return serialize_case(row)
+async def get_case_or_404(case_id: str, session: AsyncSession) -> CaseWithTimeline:
+    stmt = (
+        select(Case)
+        .where(Case.id == case_id)
+        .options(selectinload(Case.events))
+    )
+    result = await session.execute(stmt)
+    case = result.scalar_one_or_none()
 
+    if not case:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Case not found")
 
-def transition_case(case_id: str, payload: CaseTransition, actor: str) -> CaseDetail:
-    current = get_case_or_404(case_id)
-    old_stage = CaseStage(current["stage"])
-    if payload.stage not in ALLOWED_TRANSITIONS[old_stage]:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"Cannot transition from {old_stage.value} to {payload.stage.value}")
-    if payload.stage is CaseStage.UNDER_INVESTIGATION and not current["assigned_officer"]:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Assign a case officer before starting an investigation")
-    if payload.stage is CaseStage.RESPONSE_ISSUED and not payload.response_summary:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "A response summary is required before issuing a response")
-    if payload.stage is CaseStage.RESOLVED and not payload.resolution_summary:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "A resolution summary is required before resolving a case")
-
-    timestamp = now()
-    with connection() as db:
-        db.execute(
-            """
-            UPDATE cases
-            SET stage = ?,
-                response_summary = COALESCE(?, response_summary),
-                resolution_summary = COALESCE(?, resolution_summary),
-                resolved_at = ?,
-                updated_at = ?
-            WHERE id = ?
-            """,
-            (
-                payload.stage.value,
-                payload.response_summary,
-                payload.resolution_summary,
-                timestamp if payload.stage is CaseStage.RESOLVED else current["resolved_at"],
-                timestamp,
-                case_id,
-            ),
-        )
-        metadata = {
-            "from": old_stage.value,
-            "to": payload.stage.value,
-            "note": payload.note or "",
-            "response_summary": payload.response_summary or "",
-            "resolution_summary": payload.resolution_summary or "",
-        }
-        event(db, case_id, "stage_changed", actor, metadata)
-        handoff(db, case_id, "stage_changed", metadata | {"reference": current["reference"]})
-        notification(
-            db,
-            case_id,
-            f"stage_changed:{payload.stage.value}",
-            ContactChannel(current["preferred_channel"]),
-            current["contact_value"],
-            PUBLIC_STATUS_MESSAGES[payload.stage],
-            f"{case_id}:stage_changed:{payload.stage.value}",
-        )
-        row = db.execute("SELECT * FROM cases WHERE id = ?", (case_id,)).fetchone()
-    return serialize_case(row)
-
-
-def add_note(case_id: str, payload: InvestigationNoteCreate, actor: str) -> InvestigationNoteView:
-    get_case_or_404(case_id)
-    note_id = str(uuid.uuid4())
-    timestamp = now()
-    with connection() as db:
-        db.execute(
-            "INSERT INTO investigation_notes VALUES (?, ?, ?, ?, ?)",
-            (note_id, case_id, payload.note.strip(), actor, timestamp),
-        )
-        event(db, case_id, "investigation_note_added", actor, {"note_id": note_id})
-        row = db.execute("SELECT * FROM investigation_notes WHERE id = ?", (note_id,)).fetchone()
-    return InvestigationNoteView(**dict(row))
-
-
-def add_evidence(case_id: str, payload: EvidenceCreate, actor: str) -> EvidenceView:
-    get_case_or_404(case_id)
-    evidence_id = str(uuid.uuid4())
-    timestamp = now()
-    with connection() as db:
-        db.execute(
-            "INSERT INTO evidence VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                evidence_id,
-                case_id,
-                payload.file_name.strip(),
-                payload.evidence_type.strip(),
-                payload.description,
-                payload.storage_uri,
-                actor,
-                timestamp,
-            ),
-        )
-        event(db, case_id, "evidence_added", actor, {"evidence_id": evidence_id, "file_name": payload.file_name.strip()})
-        row = db.execute("SELECT * FROM evidence WHERE id = ?", (evidence_id,)).fetchone()
-    return EvidenceView(**dict(row))
-
-
-def case_timeline(case_id: str) -> list[EventView]:
-    get_case_or_404(case_id)
-    with connection() as db:
-        rows = db.execute(
-            "SELECT * FROM case_events WHERE case_id = ? ORDER BY occurred_at ASC",
-            (case_id,),
-        ).fetchall()
-    return [
+    events = [
         EventView(
-            event_type=row["event_type"],
-            actor=row["actor"],
-            occurred_at=row["occurred_at"],
-            metadata=json.loads(row["metadata_json"]),
+            event_type=e.event_type,
+            actor=e.actor,
+            occurred_at=parse_dt(e.occurred_at) or now_dt(),
+            metadata=e.metadata_dict,
         )
-        for row in rows
+        for e in sorted(case.events, key=lambda x: x.occurred_at)
     ]
+    return CaseWithTimeline(case=case_to_detail(case), events=events)
 
 
-def case_notes(case_id: str) -> list[InvestigationNoteView]:
-    get_case_or_404(case_id)
-    with connection() as db:
-        rows = db.execute(
-            "SELECT * FROM investigation_notes WHERE case_id = ? ORDER BY created_at ASC",
-            (case_id,),
-        ).fetchall()
-    return [InvestigationNoteView(**dict(row)) for row in rows]
+async def assign_case(case_id: str, payload: CaseAssignment, session: AsyncSession, actor: str = "staff") -> CaseDetail:
+    stmt = select(Case).where(Case.id == case_id)
+    result = await session.execute(stmt)
+    case = result.scalar_one_or_none()
+
+    if not case:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Case not found")
+
+    case.assigned_officer = payload.assigned_officer
+    case.updated_at = now_iso()
+
+    event = CaseEvent(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="case_assigned",
+        actor=actor,
+        occurred_at=case.updated_at,
+        metadata_json=json.dumps({"assigned_officer": payload.assigned_officer}),
+    )
+    session.add(event)
+
+    notification = NotificationEvent(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="officer_assigned",
+        channel=case.preferred_channel,
+        recipient=case.contact_value,
+        message=f"Case {case.reference} has been assigned to {payload.assigned_officer}.",
+        status="delivered" if case.preferred_channel == ContactChannel.IN_BROWSER_CHAT.value else "pending",
+        idempotency_key=f"{case_id}-assign-{int(datetime.now(UTC).timestamp())}",
+        created_at=case.updated_at,
+    )
+    session.add(notification)
+
+    await session.commit()
+    await session.refresh(case)
+    return case_to_detail(case)
 
 
-def case_evidence(case_id: str) -> list[EvidenceView]:
-    get_case_or_404(case_id)
-    with connection() as db:
-        rows = db.execute(
-            "SELECT * FROM evidence WHERE case_id = ? ORDER BY created_at ASC",
-            (case_id,),
-        ).fetchall()
-    return [EvidenceView(**dict(row)) for row in rows]
+async def transition_case(case_id: str, payload: CaseTransition, session: AsyncSession, actor: str = "staff") -> CaseDetail:
+    stmt = select(Case).where(Case.id == case_id)
+    result = await session.execute(stmt)
+    case = result.scalar_one_or_none()
+
+    if not case:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Case not found")
+
+    current_stage = CaseStage(case.stage)
+    target_stage = payload.stage
+
+    if target_stage not in ALLOWED_TRANSITIONS[current_stage]:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"Invalid transition from {current_stage.value} to {target_stage.value}",
+        )
+
+    if target_stage == CaseStage.UNDER_INVESTIGATION and not case.assigned_officer:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Case must have an assigned officer before investigation")
+
+    if target_stage == CaseStage.RESPONSE_ISSUED:
+        summary = payload.response_summary or case.response_summary
+        if not summary:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Response summary is required to issue response")
+        case.response_summary = summary
+
+    if target_stage == CaseStage.RESOLVED:
+        summary = payload.resolution_summary or case.resolution_summary
+        if not summary:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Resolution summary is required to resolve case")
+        case.resolution_summary = summary
+        case.resolved_at = now_iso()
+
+    case.stage = target_stage.value
+    case.updated_at = now_iso()
+
+    event = CaseEvent(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="stage_changed",
+        actor=actor,
+        occurred_at=case.updated_at,
+        metadata_json=json.dumps({
+            "from_stage": current_stage.value,
+            "to_stage": target_stage.value,
+            "note": payload.note,
+        }),
+    )
+    session.add(event)
+
+    msg = f"Case {case.reference} updated to {target_stage.value.replace('_', ' ')}: {PUBLIC_STATUS_MESSAGES[target_stage]}"
+    notification = NotificationEvent(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="stage_updated",
+        channel=case.preferred_channel,
+        recipient=case.contact_value,
+        message=msg,
+        status="delivered" if case.preferred_channel == ContactChannel.IN_BROWSER_CHAT.value else "pending",
+        idempotency_key=f"{case_id}-{target_stage.value}-{int(datetime.now(UTC).timestamp())}",
+        created_at=case.updated_at,
+    )
+    session.add(notification)
+
+    handoff = AgentHandoff(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="stage_transition",
+        payload_json=json.dumps({
+            "case_id": case_id,
+            "reference": case.reference,
+            "from_stage": current_stage.value,
+            "to_stage": target_stage.value,
+        }),
+        status="pending",
+        created_at=case.updated_at,
+    )
+    session.add(handoff)
+
+    await session.commit()
+    await session.refresh(case)
+    return case_to_detail(case)
 
 
-def case_notifications(case_id: str) -> list[NotificationView]:
-    get_case_or_404(case_id)
-    with connection() as db:
-        rows = db.execute(
-            """
-            SELECT id, case_id, event_type, channel, recipient, message, status,
-                   attempts, created_at, last_attempt_at, error_message
-            FROM notification_events
-            WHERE case_id = ?
-            ORDER BY created_at ASC
-            """,
-            (case_id,),
-        ).fetchall()
-    return [NotificationView(**dict(row)) for row in rows]
+async def add_note(case_id: str, payload: InvestigationNoteCreate, session: AsyncSession, actor: str = "staff") -> InvestigationNoteView:
+    stmt = select(Case).where(Case.id == case_id)
+    case = (await session.execute(stmt)).scalar_one_or_none()
+    if not case:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Case not found")
 
+    note_id = str(uuid.uuid4())
+    created = now_iso()
+    note = InvestigationNote(
+        id=note_id,
+        case_id=case_id,
+        note=payload.note,
+        actor=actor,
+        created_at=created,
+    )
+    session.add(note)
 
-def public_status(case_reference: str, verification: str | None, contact_value: str | None) -> CaseDetail:
-    normalized_reference = case_reference.strip().upper()
-    with connection() as db:
-        if verification:
-            case = db.execute(
-                "SELECT * FROM cases WHERE reference = ? AND status_verification_code = ?",
-                (normalized_reference, verification.strip()),
-            ).fetchone()
-        elif contact_value:
-            case = db.execute(
-                "SELECT * FROM cases WHERE reference = ? AND contact_value = ?",
-                (normalized_reference, contact_value.strip().lower()),
-            ).fetchone()
-        else:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Verification code or contact detail is required")
-    if case is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No verified case was found")
-    return serialize_case(case)
+    event = CaseEvent(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="note_added",
+        actor=actor,
+        occurred_at=created,
+        metadata_json=json.dumps({"note_id": note_id}),
+    )
+    session.add(event)
 
-
-def export_case(case_id: str) -> CaseExport:
-    case = serialize_case(get_case_or_404(case_id))
-    return CaseExport(
-        case=case,
-        events=case_timeline(case_id),
-        notes=case_notes(case_id),
-        evidence=case_evidence(case_id),
-        notifications=case_notifications(case_id),
+    await session.commit()
+    return InvestigationNoteView(
+        id=note_id,
+        case_id=case_id,
+        note=payload.note,
+        actor=actor,
+        created_at=parse_dt(created) or now_dt(),
     )
 
 
-def portfolio_report() -> PortfolioReport:
-    cases = list_cases()
+async def case_notes(case_id: str, session: AsyncSession) -> list[InvestigationNoteView]:
+    stmt = select(InvestigationNote).where(InvestigationNote.case_id == case_id).order_by(InvestigationNote.created_at.desc())
+    result = await session.execute(stmt)
+    notes = result.scalars().all()
+    return [
+        InvestigationNoteView(
+            id=n.id,
+            case_id=n.case_id,
+            note=n.note,
+            actor=n.actor,
+            created_at=parse_dt(n.created_at) or now_dt(),
+        )
+        for n in notes
+    ]
+
+
+async def add_evidence(case_id: str, payload: EvidenceCreate, session: AsyncSession, actor: str = "staff") -> EvidenceView:
+    stmt = select(Case).where(Case.id == case_id)
+    case = (await session.execute(stmt)).scalar_one_or_none()
+    if not case:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Case not found")
+
+    evidence_id = str(uuid.uuid4())
+    created = now_iso()
+    ev = Evidence(
+        id=evidence_id,
+        case_id=case_id,
+        file_name=payload.file_name,
+        evidence_type=payload.evidence_type,
+        description=payload.description,
+        storage_uri=payload.storage_uri or f"evidence://{evidence_id}/{payload.file_name}",
+        actor=actor,
+        created_at=created,
+    )
+    session.add(ev)
+
+    event = CaseEvent(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="evidence_registered",
+        actor=actor,
+        occurred_at=created,
+        metadata_json=json.dumps({"file_name": payload.file_name, "evidence_type": payload.evidence_type}),
+    )
+    session.add(event)
+
+    await session.commit()
+    return EvidenceView(
+        id=evidence_id,
+        case_id=case_id,
+        file_name=ev.file_name,
+        evidence_type=ev.evidence_type,
+        description=ev.description,
+        storage_uri=ev.storage_uri,
+        actor=ev.actor,
+        created_at=parse_dt(created) or now_dt(),
+    )
+
+
+async def case_evidence(case_id: str, session: AsyncSession) -> list[EvidenceView]:
+    stmt = select(Evidence).where(Evidence.case_id == case_id).order_by(Evidence.created_at.desc())
+    result = await session.execute(stmt)
+    return [
+        EvidenceView(
+            id=e.id,
+            case_id=e.case_id,
+            file_name=e.file_name,
+            evidence_type=e.evidence_type,
+            description=e.description,
+            storage_uri=e.storage_uri,
+            actor=e.actor,
+            created_at=parse_dt(e.created_at) or now_dt(),
+        )
+        for e in result.scalars().all()
+    ]
+
+
+async def case_timeline(case_id: str, session: AsyncSession) -> list[EventView]:
+    stmt = select(CaseEvent).where(CaseEvent.case_id == case_id).order_by(CaseEvent.occurred_at.asc())
+    result = await session.execute(stmt)
+    return [
+        EventView(
+            event_type=e.event_type,
+            actor=e.actor,
+            occurred_at=parse_dt(e.occurred_at) or now_dt(),
+            metadata=e.metadata_dict,
+        )
+        for e in result.scalars().all()
+    ]
+
+
+async def case_notifications(case_id: str, session: AsyncSession) -> list[NotificationView]:
+    stmt = select(NotificationEvent).where(NotificationEvent.case_id == case_id).order_by(NotificationEvent.created_at.desc())
+    result = await session.execute(stmt)
+    return [
+        NotificationView(
+            id=n.id,
+            case_id=n.case_id,
+            event_type=n.event_type,
+            channel=ContactChannel(n.channel),
+            recipient=n.recipient,
+            message=n.message,
+            status=n.status,
+            attempts=n.attempts,
+            created_at=parse_dt(n.created_at) or now_dt(),
+            last_attempt_at=parse_dt(n.last_attempt_at),
+            error_message=n.error_message,
+        )
+        for n in result.scalars().all()
+    ]
+
+
+async def export_case(case_id: str, session: AsyncSession) -> CaseExport:
+    case_detail = (await get_case_or_404(case_id, session)).case
+    events = await case_timeline(case_id, session)
+    notes = await case_notes(case_id, session)
+    evidence = await case_evidence(case_id, session)
+    notifications = await case_notifications(case_id, session)
+
+    return CaseExport(
+        case=case_detail,
+        events=events,
+        notes=notes,
+        evidence=evidence,
+        notifications=notifications,
+    )
+
+
+async def portfolio_report(session: AsyncSession) -> PortfolioReport:
+    stmt = select(Case)
+    result = await session.execute(stmt)
+    cases = result.scalars().all()
+
+    total = len(cases)
     by_stage: dict[str, int] = {}
     by_priority: dict[str, int] = {}
     by_category: dict[str, int] = {}
-    for case in cases:
-        by_stage[case.stage.value] = by_stage.get(case.stage.value, 0) + 1
-        by_priority[case.priority] = by_priority.get(case.priority, 0) + 1
-        by_category[case.category] = by_category.get(case.category, 0) + 1
+
+    open_cases = 0
+    resolved_cases = 0
+    unassigned = 0
+    escalated = 0
+    at_risk = 0
+    breached = 0
+
+    for c in cases:
+        by_stage[c.stage] = by_stage.get(c.stage, 0) + 1
+        by_priority[c.priority] = by_priority.get(c.priority, 0) + 1
+        by_category[c.category] = by_category.get(c.category, 0) + 1
+
+        if c.stage == CaseStage.RESOLVED.value:
+            resolved_cases += 1
+        else:
+            open_cases += 1
+            if not c.assigned_officer:
+                unassigned += 1
+            if c.stage == CaseStage.ESCALATED.value:
+                escalated += 1
+
+            sla = calculate_sla_status(c)
+            if sla == SlaStatus.AT_RISK:
+                at_risk += 1
+            elif sla == SlaStatus.BREACHED:
+                breached += 1
+
     return PortfolioReport(
-        total_cases=len(cases),
-        open_cases=sum(1 for case in cases if case.stage is not CaseStage.RESOLVED),
-        resolved_cases=sum(1 for case in cases if case.stage is CaseStage.RESOLVED),
-        unassigned_cases=sum(1 for case in cases if not case.assigned_officer and case.stage is not CaseStage.RESOLVED),
-        escalated_cases=sum(1 for case in cases if case.stage is CaseStage.ESCALATED),
-        at_risk_cases=sum(1 for case in cases if case.sla_status is SlaStatus.AT_RISK),
-        breached_cases=sum(1 for case in cases if case.sla_status is SlaStatus.BREACHED),
+        total_cases=total,
+        open_cases=open_cases,
+        resolved_cases=resolved_cases,
+        unassigned_cases=unassigned,
+        escalated_cases=escalated,
+        at_risk_cases=at_risk,
+        breached_cases=breached,
         by_stage=by_stage,
         by_priority=by_priority,
         by_category=by_category,
     )
 
 
-def list_handoffs() -> list[HandoffView]:
-    with connection() as db:
-        rows = db.execute(
-            """
-            SELECT id, case_id, event_type, status, attempts, created_at, last_attempt_at, error_message
-            FROM agent_handoffs
-            ORDER BY created_at DESC
-            """
-        ).fetchall()
-    return [HandoffView(**dict(row)) for row in rows]
-
-
-def deliver_handoff(handoff_id: str) -> HandoffView:
-    with connection() as db:
-        row = db.execute("SELECT * FROM agent_handoffs WHERE id = ?", (handoff_id,)).fetchone()
-        if row is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Agent handoff not found")
-        attempt_time = now()
-        attempts = row["attempts"] + 1
-        if not settings.swiftagents_webhook_url:
-            db.execute(
-                """
-                UPDATE agent_handoffs
-                SET status = 'awaiting_configuration', attempts = ?, last_attempt_at = ?, error_message = ?
-                WHERE id = ?
-                """,
-                (attempts, attempt_time, "SWIFTAGENTS_WEBHOOK_URL is not configured", handoff_id),
-            )
-        else:
-            request = urllib.request.Request(
-                settings.swiftagents_webhook_url,
-                data=row["payload_json"].encode(),
-                headers={"Content-Type": "application/json", "X-Case-Event": row["event_type"]},
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(request, timeout=10) as response:
-                    status_code = response.status
-                if not 200 <= status_code < 300:
-                    raise RuntimeError(f"Webhook returned HTTP {status_code}")
-                db.execute(
-                    """
-                    UPDATE agent_handoffs
-                    SET status = 'delivered', attempts = ?, last_attempt_at = ?, error_message = NULL
-                    WHERE id = ?
-                    """,
-                    (attempts, attempt_time, handoff_id),
-                )
-            except (urllib.error.URLError, RuntimeError) as error:
-                db.execute(
-                    """
-                    UPDATE agent_handoffs
-                    SET status = 'failed', attempts = ?, last_attempt_at = ?, error_message = ?
-                    WHERE id = ?
-                    """,
-                    (attempts, attempt_time, str(error), handoff_id),
-                )
-        updated = db.execute(
-            """
-            SELECT id, case_id, event_type, status, attempts, created_at, last_attempt_at, error_message
-            FROM agent_handoffs
-            WHERE id = ?
-            """,
-            (handoff_id,),
-        ).fetchone()
-    return HandoffView(**dict(updated))
-
-
-def list_notifications() -> list[NotificationView]:
-    with connection() as db:
-        rows = db.execute(
-            """
-            SELECT id, case_id, event_type, channel, recipient, message, status,
-                   attempts, created_at, last_attempt_at, error_message
-            FROM notification_events
-            ORDER BY created_at DESC
-            """
-        ).fetchall()
-    return [NotificationView(**dict(row)) for row in rows]
-
-
-def deliver_notification(notification_id: str) -> NotificationView:
-    with connection() as db:
-        row = db.execute("SELECT * FROM notification_events WHERE id = ?", (notification_id,)).fetchone()
-        if row is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "Notification event not found")
-        attempt_time = now()
-        attempts = row["attempts"] + 1
-        if settings.swiftagents_webhook_url:
-            status_value = "delivered"
-            error_message = None
-        else:
-            status_value = "awaiting_configuration"
-            error_message = "Notification provider is set to mock; configure provider credentials for real delivery"
-        db.execute(
-            """
-            UPDATE notification_events
-            SET status = ?, attempts = ?, last_attempt_at = ?, error_message = ?
-            WHERE id = ?
-            """,
-            (status_value, attempts, attempt_time, error_message, notification_id),
+async def list_handoffs(session: AsyncSession) -> list[HandoffView]:
+    stmt = select(AgentHandoff).order_by(AgentHandoff.created_at.desc())
+    result = await session.execute(stmt)
+    return [
+        HandoffView(
+            id=h.id,
+            case_id=h.case_id,
+            event_type=h.event_type,
+            status=h.status,
+            attempts=h.attempts,
+            created_at=parse_dt(h.created_at) or now_dt(),
+            last_attempt_at=parse_dt(h.last_attempt_at),
+            error_message=h.error_message,
         )
-        updated = db.execute(
-            """
-            SELECT id, case_id, event_type, channel, recipient, message, status,
-                   attempts, created_at, last_attempt_at, error_message
-            FROM notification_events
-            WHERE id = ?
-            """,
-            (notification_id,),
-        ).fetchone()
-    return NotificationView(**dict(updated))
+        for h in result.scalars().all()
+    ]
+
+
+async def deliver_handoff(handoff_id: str, session: AsyncSession) -> HandoffView:
+    stmt = select(AgentHandoff).where(AgentHandoff.id == handoff_id)
+    result = await session.execute(stmt)
+    h = result.scalar_one_or_none()
+    if not h:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Handoff event not found")
+
+    h.attempts += 1
+    h.last_attempt_at = now_iso()
+
+    if settings.swiftagents_webhook_url:
+        try:
+            req = urllib.request.Request(
+                settings.swiftagents_webhook_url,
+                data=h.payload_json.encode("utf-8"),
+                headers={"Content-Type": "application/json", "X-Agent-Key": settings.agent_key or ""},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                if resp.status < 300:
+                    h.status = "delivered"
+                    h.error_message = None
+                else:
+                    h.status = "failed"
+                    h.error_message = f"HTTP {resp.status}"
+        except Exception as ex:
+            h.status = "failed"
+            h.error_message = str(ex)
+    else:
+        h.status = "awaiting_configuration"
+        h.error_message = "SWIFTAGENTS_WEBHOOK_URL not configured"
+
+    await session.commit()
+    await session.refresh(h)
+    return HandoffView(
+        id=h.id,
+        case_id=h.case_id,
+        event_type=h.event_type,
+        status=h.status,
+        attempts=h.attempts,
+        created_at=parse_dt(h.created_at) or now_dt(),
+        last_attempt_at=parse_dt(h.last_attempt_at),
+        error_message=h.error_message,
+    )
+
+
+async def list_notifications(session: AsyncSession) -> list[NotificationView]:
+    stmt = select(NotificationEvent).order_by(NotificationEvent.created_at.desc())
+    result = await session.execute(stmt)
+    return [
+        NotificationView(
+            id=n.id,
+            case_id=n.case_id,
+            event_type=n.event_type,
+            channel=ContactChannel(n.channel),
+            recipient=n.recipient,
+            message=n.message,
+            status=n.status,
+            attempts=n.attempts,
+            created_at=parse_dt(n.created_at) or now_dt(),
+            last_attempt_at=parse_dt(n.last_attempt_at),
+            error_message=n.error_message,
+        )
+        for n in result.scalars().all()
+    ]
+
+
+async def deliver_notification(notification_id: str, session: AsyncSession) -> NotificationView:
+    stmt = select(NotificationEvent).where(NotificationEvent.id == notification_id)
+    result = await session.execute(stmt)
+    n = result.scalar_one_or_none()
+    if not n:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Notification event not found")
+
+    n.attempts += 1
+    n.last_attempt_at = now_iso()
+    n.status = "awaiting_configuration"
+    n.error_message = "Notification provider not configured"
+
+    await session.commit()
+    await session.refresh(n)
+    return NotificationView(
+        id=n.id,
+        case_id=n.case_id,
+        event_type=n.event_type,
+        channel=ContactChannel(n.channel),
+        recipient=n.recipient,
+        message=n.message,
+        status=n.status,
+        attempts=n.attempts,
+        created_at=parse_dt(n.created_at) or now_dt(),
+        last_attempt_at=parse_dt(n.last_attempt_at),
+        error_message=n.error_message,
+    )

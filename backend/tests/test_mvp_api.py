@@ -115,3 +115,38 @@ def test_manager_report_and_retryable_integration_events(tmp_path: Path) -> None
         cases = client.get("/v1/cases", params={"queue": "unassigned"})
         assert cases.status_code == 200
         assert cases.json()[0]["id"] == case["id"]
+
+
+def test_swiftagents_agent_intake_and_webhook(tmp_path: Path) -> None:
+    with app_client(tmp_path) as client:
+        # Check config endpoint
+        cfg = client.get("/v1/integrations/swiftagents/config")
+        assert cfg.status_code == 200
+        assert "widget_url" in cfg.json()
+
+        # Agent complaint intake tool call
+        agent_payload = {
+            "complainant_name": "Tari Ebi",
+            "contact_value": "+2348099887766",
+            "preferred_channel": "in_browser_chat",
+            "category": "Gas flaring",
+            "description": "Continuous high-intensity flaring causing heat and roof vibrations.",
+            "location": "Rumuekpe community",
+            "priority": "high",
+        }
+        res = client.post("/v1/agent/complaints", json=agent_payload)
+        assert res.status_code == 201
+        data = res.json()
+        assert data["ticket_id"].startswith("HCC-")
+        assert data["badge"]["label"] == "Ticket ID"
+        assert data["badge"]["value"] == data["ticket_id"]
+        assert data["status"] == "reported"
+
+        # Webhook endpoint
+        wh_res = client.post(
+            "/v1/agent/webhook",
+            json={"event": "ticket.created", "ticket_id": data["ticket_id"]},
+        )
+        assert wh_res.status_code == 200
+        assert wh_res.json()["status"] == "received"
+

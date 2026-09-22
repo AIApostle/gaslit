@@ -8,7 +8,9 @@ import type {
   InvestigationNote,
   NotificationEvent,
   PortfolioReport,
-  PublicStatus
+  PublicStatus,
+  SwiftAgentConfig,
+  SwiftAgentToolResponse,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -50,7 +52,7 @@ export type ComplaintInput = {
 export function createComplaint(payload: ComplaintInput) {
   return request<CaseSummary & { status_verification_code: string }>("/v1/public/complaints", {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 }
 
@@ -61,14 +63,15 @@ export function lookupStatus(payload: {
 }) {
   return request<PublicStatus>("/v1/public/status", {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 }
 
-export function listCases(filters: { stage?: CaseStage | ""; queue?: string }) {
+export function listCases(filters: { stage?: CaseStage | ""; queue?: string; query?: string }) {
   const params = new URLSearchParams();
   if (filters.stage) params.set("stage", filters.stage);
   if (filters.queue) params.set("queue", filters.queue);
+  if (filters.query) params.set("query", filters.query);
   return request<CaseSummary[]>(`/v1/cases${params.toString() ? `?${params}` : ""}`);
 }
 
@@ -91,7 +94,7 @@ export function getCaseNotifications(id: string) {
 export function assignCase(id: string, assignedOfficer: string) {
   return request(`/v1/cases/${id}/assignments`, {
     method: "POST",
-    body: JSON.stringify({ assigned_officer: assignedOfficer })
+    body: JSON.stringify({ assigned_officer: assignedOfficer }),
   });
 }
 
@@ -101,21 +104,21 @@ export function transitionCase(
 ) {
   return request(`/v1/cases/${id}/transitions`, {
     method: "POST",
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
   });
 }
 
 export function addNote(id: string, note: string) {
   return request<InvestigationNote>(`/v1/cases/${id}/notes`, {
     method: "POST",
-    body: JSON.stringify({ note })
+    body: JSON.stringify({ note }),
   });
 }
 
 export function addEvidence(id: string, payload: { file_name: string; description?: string | null }) {
   return request<Evidence>(`/v1/cases/${id}/evidence`, {
     method: "POST",
-    body: JSON.stringify({ ...payload, evidence_type: "document" })
+    body: JSON.stringify({ ...payload, evidence_type: "document" }),
   });
 }
 
@@ -141,4 +144,23 @@ export function listNotifications() {
 
 export function retryNotification(id: string) {
   return request<NotificationEvent>(`/v1/notifications/${id}/deliver`, { method: "POST" });
+}
+
+export function getSwiftAgentConfig() {
+  return request<SwiftAgentConfig>("/v1/integrations/swiftagents/config");
+}
+
+export function agentSubmitComplaint(payload: {
+  complainant_name?: string;
+  contact_value?: string;
+  preferred_channel?: string;
+  category?: string;
+  description: string;
+  location?: string;
+  priority?: string;
+}) {
+  return request<SwiftAgentToolResponse>("/v1/agent/complaints", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

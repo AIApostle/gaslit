@@ -276,7 +276,7 @@ function PublicCommunityPortal({
       <section className="portal-hero">
         <div className="portal-badge">
           <Sparkles size={15} />
-          <span>Official Host Community Grievance Service • Powered by SwiftAgents</span>
+          <span>Official Host Community Grievance Service</span>
         </div>
         <h1>Report Host Community Grievances Directly. No Paperwork. No Delays.</h1>
         <p>
@@ -372,8 +372,8 @@ function PublicCommunityPortal({
             <span className="step-num">2</span>
             <strong>Instant Verified Ticket</strong>
             <span>
-              SwiftAgents logs your complaint directly to the system of record and issues an official Ticket ID badge
-              with a private 6-digit verification code.
+              Your grievance is logged directly to the system of record with an official Ticket ID badge
+              and a private 6-digit verification code.
             </span>
           </div>
 
@@ -391,9 +391,6 @@ function PublicCommunityPortal({
       {/* Footer */}
       <footer className="portal-footer">
         <div>Host Community Case Desk &copy; {new Date().getFullYear()} • Secure & Privacy Preserving</div>
-        <div>
-          <span>Integrated with SwiftAgents Conversational AI &amp; Neon Serverless Postgres</span>
-        </div>
       </footer>
     </div>
   );

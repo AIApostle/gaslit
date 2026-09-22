@@ -67,7 +67,7 @@ export function SwiftAgentChatModal({
       const welcome: ChatMessage = {
         id: "welcome-1",
         sender: "agent",
-        text: "Hello! I am your **Host Community Grievance Officer** powered by SwiftAgents. I can record an environmental or infrastructure incident directly to the system of record, check your live ticket status, attach photos/documents, or transfer you to a live human officer.",
+        text: "Hello! I am your **Host Community Grievance Officer**. I can record an incident directly to the system of record, check your live ticket status, attach photos/documents, or connect you with a human liaison officer. What would you like to report today?",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
       setMessages([welcome]);
@@ -325,25 +325,13 @@ export function SwiftAgentChatModal({
             <div>
               <div className="swift-header-title">
                 <strong>Host Community AI Officer</strong>
-                <span className="swift-badge-pill">SwiftAgents Live</span>
               </div>
               <small className="swift-header-sub">
-                {isHandoffActive ? "🟢 Human Officer Dispatched" : "Conversational Intake & Case Retrieval"}
+                {isHandoffActive ? "🟢 Human Officer Dispatched" : "Online • Ready to assist"}
               </small>
             </div>
           </div>
           <div className="swift-header-actions">
-            {!isHandoffActive && (
-              <button
-                type="button"
-                className="swift-btn-handoff"
-                onClick={() => handleUserMessage("I want to speak with a human officer")}
-                title="Escalate to a human officer"
-              >
-                <Users size={14} />
-                <span>Human Handoff</span>
-              </button>
-            )}
             <button type="button" className="swift-btn-close" onClick={onClose} aria-label="Close chat">
               <X size={18} />
             </button>
@@ -380,6 +368,16 @@ export function SwiftAgentChatModal({
                       <small className="swift-ticket-pin">
                         PIN: <strong>{m.badge.verification_code}</strong> (Keep this private)
                       </small>
+                    )}
+                    {!isHandoffActive && (
+                      <button
+                        type="button"
+                        className="swift-handoff-action-link"
+                        onClick={() => handleUserMessage("Connect me to a human liaison officer for this ticket")}
+                      >
+                        <Users size={13} />
+                        <span>Request human officer follow-up &rarr;</span>
+                      </button>
                     )}
                   </div>
                 )}
@@ -424,7 +422,7 @@ export function SwiftAgentChatModal({
               🔍 Track Ticket
             </button>
             <button type="button" onClick={() => handleUserMessage("Connect me to a human officer")}>
-              <Users size={12} /> Human Officer
+              <Users size={12} /> Speak with Officer
             </button>
           </div>
         )}

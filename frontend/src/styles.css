@@ -1410,6 +1410,28 @@ textarea:focus {
   color: var(--muted);
 }
 
+.swift-handoff-action-link {
+  margin-top: 8px;
+  padding: 8px 0 2px;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  border-top: 1px dashed #c2e0dc;
+  width: 100%;
+  text-align: left;
+  transition: color 0.15s ease;
+}
+
+.swift-handoff-action-link:hover {
+  color: #0b443e;
+}
+
 .swift-evidence-chip {
   margin-top: 8px;
   display: inline-flex;

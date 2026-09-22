@@ -70,7 +70,7 @@ class AgentHandoff(Base):
     __tablename__ = "agent_handoffs"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    case_id: Mapped[str] = mapped_column(String(64), ForeignKey("cases.id", ondelete="CASCADE"), nullable=False, index=True)
+    case_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("cases.id", ondelete="CASCADE"), nullable=True, index=True)
     event_type: Mapped[str] = mapped_column(String(128), nullable=False)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
     status: Mapped[str] = mapped_column(String(64), nullable=False, default="pending", index=True)

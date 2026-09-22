@@ -11,6 +11,10 @@ import type {
   PublicStatus,
   SwiftAgentConfig,
   SwiftAgentToolResponse,
+  SwiftAgentLookupResponse,
+  SwiftAgentEvidenceResponse,
+  SwiftAgentHandoffResponse,
+  SwiftAgentToolCatalog,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -163,4 +167,41 @@ export function agentSubmitComplaint(payload: {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function agentLookupCase(reference: string, verificationCode?: string) {
+  return request<SwiftAgentLookupResponse>("/v1/agent/cases/lookup", {
+    method: "POST",
+    body: JSON.stringify({ reference, verification_code: verificationCode }),
+  });
+}
+
+export function agentAttachEvidence(payload: {
+  reference: string;
+  file_name: string;
+  evidence_type?: string;
+  storage_uri?: string;
+  description?: string;
+}) {
+  return request<SwiftAgentEvidenceResponse>("/v1/agent/evidence", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function agentRequestHandoff(payload: {
+  reference?: string;
+  citizen_name?: string;
+  contact_value?: string;
+  reason: string;
+  urgency?: string;
+}) {
+  return request<SwiftAgentHandoffResponse>("/v1/agent/handoff", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getAgentToolsCatalog() {
+  return request<SwiftAgentToolCatalog>("/v1/agent/tools.json");
 }

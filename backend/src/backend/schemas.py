@@ -65,6 +65,53 @@ class SwiftAgentToolResponse(BaseModel):
     badge: dict[str, str]
 
 
+class SwiftAgentCaseLookupInput(BaseModel):
+    reference: str = Field(min_length=3, max_length=60)
+    verification_code: str | None = Field(default=None, max_length=40)
+
+
+class SwiftAgentCaseLookupResponse(BaseModel):
+    found: bool
+    reference: str
+    stage: str
+    category: str
+    location: str
+    assigned_officer: str | None = None
+    sla_status: str
+    sla_due_at: datetime | None = None
+    latest_update: str | None = None
+    summary_markdown: str
+
+
+class SwiftAgentEvidenceInput(BaseModel):
+    reference: str = Field(min_length=3, max_length=60)
+    file_name: str = Field(min_length=2, max_length=240)
+    evidence_type: str = Field(default="photo", max_length=80)
+    storage_uri: str | None = Field(default=None, max_length=500)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class SwiftAgentEvidenceResponse(BaseModel):
+    success: bool
+    evidence_id: str
+    reference: str
+    message: str
+
+
+class SwiftAgentHandoffInput(BaseModel):
+    reference: str | None = Field(default=None, max_length=60)
+    citizen_name: str = Field(default="Community Member", max_length=160)
+    contact_value: str = Field(default="in-app-session", max_length=160)
+    reason: str = Field(min_length=3, max_length=2000)
+    urgency: str = Field(default="high", pattern="^(normal|high|critical)$")
+
+
+class SwiftAgentHandoffResponse(BaseModel):
+    handoff_id: str
+    status: str
+    message: str
+
+
 class CaseTransition(BaseModel):
     stage: CaseStage
     note: str | None = Field(default=None, max_length=2000)

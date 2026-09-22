@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     neon_api_key: str | None = Field(default=None, alias="NEON_API_KEY")
 
     # SwiftAgents Integration
-    swiftagents_company_id: str | None = Field(default=None, alias="SWIFTAGENTS_COMPANY_ID")
+    swiftagents_company_id: str = Field(default="e465b6dd-7f97-4fcd-bed2-737555796064", alias="SWIFTAGENTS_COMPANY_ID")
     swiftagents_public_key: str | None = Field(default=None, alias="SWIFTAGENTS_PUBLIC_KEY")
     agent_key: str | None = Field(default=None, alias="SWIFTAGENTS_AGENT_KEY")
     swiftagents_webhook_url: str | None = Field(default=None, alias="SWIFTAGENTS_WEBHOOK_URL")

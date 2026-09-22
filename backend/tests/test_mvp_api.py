@@ -150,3 +150,53 @@ def test_swiftagents_agent_intake_and_webhook(tmp_path: Path) -> None:
         assert wh_res.status_code == 200
         assert wh_res.json()["status"] == "received"
 
+        # Agent lookup tool
+        lookup_res = client.post(
+            "/v1/agent/cases/lookup",
+            json={"reference": data["ticket_id"]},
+        )
+        assert lookup_res.status_code == 200
+        lookup_data = lookup_res.json()
+        assert lookup_data["found"] is True
+        assert lookup_data["reference"] == data["ticket_id"]
+        assert "Case Status:" in lookup_data["summary_markdown"]
+
+        # Agent evidence attachment tool
+        ev_res = client.post(
+            "/v1/agent/evidence",
+            json={
+                "reference": data["ticket_id"],
+                "file_name": "flare_night_shot.jpg",
+                "evidence_type": "photo",
+                "storage_uri": "https://storage.example.com/flare_night_shot.jpg",
+                "description": "Nighttime flare photo showing intensity",
+            },
+        )
+        assert ev_res.status_code == 200
+        assert ev_res.json()["success"] is True
+
+        # Agent handoff tool
+        handoff_res = client.post(
+            "/v1/agent/handoff",
+            json={
+                "reference": data["ticket_id"],
+                "citizen_name": "Tari Ebi",
+                "contact_value": "+2348099887766",
+                "reason": "Citizen is requesting an urgent on-site field team immediately",
+                "urgency": "critical",
+            },
+        )
+        assert handoff_res.status_code == 200
+        assert handoff_res.json()["status"] == "pending"
+
+        # Tools catalog endpoint
+        tools_res = client.get("/v1/agent/tools.json")
+        assert tools_res.status_code == 200
+        tools = tools_res.json()["tools"]
+        assert len(tools) == 4
+        tool_names = [t["name"] for t in tools]
+        assert "submit_complaint" in tool_names
+        assert "lookup_case" in tool_names
+        assert "attach_evidence" in tool_names
+        assert "request_human_handoff" in tool_names
+

@@ -28,6 +28,12 @@ from .schemas import (
     StatusLookup,
     SwiftAgentComplaintInput,
     SwiftAgentToolResponse,
+    SwiftAgentCaseLookupInput,
+    SwiftAgentCaseLookupResponse,
+    SwiftAgentEvidenceInput,
+    SwiftAgentEvidenceResponse,
+    SwiftAgentHandoffInput,
+    SwiftAgentHandoffResponse,
 )
 from .service import (
     add_evidence,
@@ -43,6 +49,9 @@ from .service import (
     export_case,
     get_case_or_404,
     handle_agent_complaint,
+    handle_agent_lookup,
+    handle_agent_evidence,
+    handle_agent_handoff,
     list_cases,
     list_handoffs,
     list_notifications,
@@ -133,6 +142,122 @@ async def agent_submit_complaint(
 ) -> SwiftAgentToolResponse:
     """Primary tool endpoint called by SwiftAgents AI during conversational intake."""
     return await handle_agent_complaint(payload, session=session)
+
+
+@app.post(
+    "/v1/agent/cases/lookup",
+    response_model=SwiftAgentCaseLookupResponse,
+    dependencies=[Depends(require_agent)],
+)
+async def agent_lookup_case(
+    payload: SwiftAgentCaseLookupInput,
+    session: AsyncSession = Depends(get_session),
+) -> SwiftAgentCaseLookupResponse:
+    """Tool endpoint called by SwiftAgents to retrieve case status and investigation updates."""
+    return await handle_agent_lookup(payload, session=session)
+
+
+@app.post(
+    "/v1/agent/evidence",
+    response_model=SwiftAgentEvidenceResponse,
+    dependencies=[Depends(require_agent)],
+)
+async def agent_attach_evidence(
+    payload: SwiftAgentEvidenceInput,
+    session: AsyncSession = Depends(get_session),
+) -> SwiftAgentEvidenceResponse:
+    """Tool endpoint called by SwiftAgents when a citizen uploads photos or documents in chat."""
+    return await handle_agent_evidence(payload, session=session)
+
+
+@app.post(
+    "/v1/agent/handoff",
+    response_model=SwiftAgentHandoffResponse,
+    dependencies=[Depends(require_agent)],
+)
+async def agent_request_handoff(
+    payload: SwiftAgentHandoffInput,
+    session: AsyncSession = Depends(get_session),
+) -> SwiftAgentHandoffResponse:
+    """Tool endpoint called by SwiftAgents to trigger human officer handoff."""
+    return await handle_agent_handoff(payload, session=session)
+
+
+@app.get("/v1/agent/tools.json")
+def get_swiftagents_tool_catalog() -> dict[str, Any]:
+    """Returns the ready-to-import SwiftAgents tool schemas for your SwiftAgents Dashboard."""
+    return {
+        "version": "1.0.0",
+        "description": "Host Community Case Desk AI Agent Tool Suite",
+        "tools": [
+            {
+                "name": "submit_complaint",
+                "description": "Log an official host community grievance (gas flare, oil spill, water contamination, health issue) to generate a verified case ticket.",
+                "method": "POST",
+                "endpoint": "/v1/agent/complaints",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "complainant_name": {"type": "string", "description": "Full name or Community Member"},
+                        "contact_value": {"type": "string", "description": "Phone number or email"},
+                        "category": {"type": "string", "description": "Gas Flaring, Oil Spill, Water Contamination, Health Hazard"},
+                        "description": {"type": "string", "description": "Detailed explanation of what occurred"},
+                        "location": {"type": "string", "description": "Town, local government, or facility site name"},
+                        "priority": {"type": "string", "enum": ["low", "normal", "high", "critical"]}
+                    },
+                    "required": ["description", "category", "location"]
+                }
+            },
+            {
+                "name": "lookup_case",
+                "description": "Retrieve the current live status, assigned officer, investigation notes, and SLA status for an existing ticket.",
+                "method": "POST",
+                "endpoint": "/v1/agent/cases/lookup",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reference": {"type": "string", "description": "The Ticket ID (e.g. HCC-20260922-A1B2)"},
+                        "verification_code": {"type": "string", "description": "Optional 6-digit verification code"}
+                    },
+                    "required": ["reference"]
+                }
+            },
+            {
+                "name": "attach_evidence",
+                "description": "Attach a photo, PDF document, or incident file uploaded by the user during the chat to an active case.",
+                "method": "POST",
+                "endpoint": "/v1/agent/evidence",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reference": {"type": "string", "description": "The Ticket ID"},
+                        "file_name": {"type": "string", "description": "Name of the uploaded file"},
+                        "evidence_type": {"type": "string", "enum": ["photo", "document", "video"], "default": "photo"},
+                        "storage_uri": {"type": "string", "description": "URL or storage key of the uploaded file"},
+                        "description": {"type": "string", "description": "What this photo or document proves"}
+                    },
+                    "required": ["reference", "file_name"]
+                }
+            },
+            {
+                "name": "request_human_handoff",
+                "description": "Escalate the current chat session to a live human Community Liaison Officer.",
+                "method": "POST",
+                "endpoint": "/v1/agent/handoff",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "reference": {"type": "string", "description": "Ticket ID if already created"},
+                        "citizen_name": {"type": "string", "description": "Name of the person"},
+                        "contact_value": {"type": "string", "description": "Phone or email"},
+                        "reason": {"type": "string", "description": "Why human escalation is required"},
+                        "urgency": {"type": "string", "enum": ["normal", "high", "critical"]}
+                    },
+                    "required": ["reason"]
+                }
+            }
+        ]
+    }
 
 
 @app.post("/v1/public/status", response_model=PublicCaseStatus)

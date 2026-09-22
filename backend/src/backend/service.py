@@ -43,6 +43,12 @@ from .schemas import (
     StatusLookup,
     SwiftAgentComplaintInput,
     SwiftAgentToolResponse,
+    SwiftAgentCaseLookupInput,
+    SwiftAgentCaseLookupResponse,
+    SwiftAgentEvidenceInput,
+    SwiftAgentEvidenceResponse,
+    SwiftAgentHandoffInput,
+    SwiftAgentHandoffResponse,
 )
 
 ALLOWED_TRANSITIONS = {
@@ -288,6 +294,163 @@ async def handle_agent_complaint(payload: SwiftAgentComplaintInput, session: Asy
         verification_code=detail.status_verification_code or "",
         message=msg,
         badge={"label": "Ticket ID", "value": detail.reference},
+    )
+
+
+async def handle_agent_lookup(payload: SwiftAgentCaseLookupInput, session: AsyncSession) -> SwiftAgentCaseLookupResponse:
+    cleaned_ref = payload.reference.strip()
+    stmt = (
+        select(Case)
+        .options(selectinload(Case.notes), selectinload(Case.events))
+        .where(Case.reference.ilike(cleaned_ref))
+    )
+    res = await session.execute(stmt)
+    case = res.scalar_one_or_none()
+
+    if not case:
+        # Try substring match
+        stmt = (
+            select(Case)
+            .options(selectinload(Case.notes), selectinload(Case.events))
+            .where(Case.reference.ilike(f"%{cleaned_ref}%"))
+        )
+        res = await session.execute(stmt)
+        case = res.scalar_one_or_none()
+
+    if not case:
+        return SwiftAgentCaseLookupResponse(
+            found=False,
+            reference=payload.reference,
+            stage="unknown",
+            category="unknown",
+            location="unknown",
+            sla_status="unknown",
+            summary_markdown=f"⚠️ No case record was found matching ticket reference `{payload.reference}`. Please double check the ID.",
+        )
+
+    sla_st = calculate_sla_status(case).value
+    officer = case.assigned_officer or "Unassigned (Triage in progress)"
+    latest_note = case.notes[-1].note if case.notes else None
+    stage_enum = CaseStage(case.stage)
+    stage_name = PUBLIC_STATUS_MESSAGES.get(stage_enum, case.stage.replace('_', ' ').title())
+    due_at = parse_dt(case.sla_due_at)
+
+    md = (
+        f"### 📋 Case Status: `{case.reference}`\n\n"
+        f"* **Category**: {case.category}\n"
+        f"* **Location**: {case.location}\n"
+        f"* **Current Stage**: **{stage_name}**\n"
+        f"* **Assigned Officer**: {officer}\n"
+        f"* **SLA Status**: `{sla_st.upper()}`"
+    )
+    if due_at:
+        md += f" (Resolution Target: {due_at.strftime('%b %d, %Y %H:%M UTC')})\n"
+    else:
+        md += "\n"
+    if latest_note:
+        md += f"\n* **Latest Investigation Update**: \"{latest_note}\"\n"
+    if case.response_summary:
+        md += f"\n* **Official Response**: {case.response_summary}\n"
+    if case.resolution_summary:
+        md += f"\n* **Resolution Notice**: {case.resolution_summary}\n"
+
+    return SwiftAgentCaseLookupResponse(
+        found=True,
+        reference=case.reference,
+        stage=case.stage,
+        category=case.category,
+        location=case.location,
+        assigned_officer=case.assigned_officer,
+        sla_status=sla_st,
+        sla_due_at=due_at,
+        latest_update=latest_note,
+        summary_markdown=md,
+    )
+
+
+async def handle_agent_evidence(payload: SwiftAgentEvidenceInput, session: AsyncSession) -> SwiftAgentEvidenceResponse:
+    stmt = select(Case).where(Case.reference.ilike(payload.reference.strip()))
+    res = await session.execute(stmt)
+    case = res.scalar_one_or_none()
+    if not case:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Case with reference {payload.reference} not found")
+
+    ev = Evidence(
+        id=str(uuid.uuid4()),
+        case_id=case.id,
+        file_name=payload.file_name,
+        evidence_type=payload.evidence_type,
+        description=payload.description or f"Uploaded via SwiftAgents chat ({payload.file_name})",
+        storage_uri=payload.storage_uri or f"/uploads/{payload.file_name}",
+        actor="swiftagents_ai",
+        created_at=now_iso(),
+    )
+    session.add(ev)
+
+    event = CaseEvent(
+        id=str(uuid.uuid4()),
+        case_id=case.id,
+        event_type="evidence_uploaded",
+        actor="swiftagents_ai",
+        metadata_json=json.dumps({"file_name": payload.file_name, "type": payload.evidence_type}),
+        occurred_at=now_iso(),
+    )
+    session.add(event)
+    await session.commit()
+
+    return SwiftAgentEvidenceResponse(
+        success=True,
+        evidence_id=ev.id,
+        reference=case.reference,
+        message=f"Evidence document '{payload.file_name}' attached to case {case.reference}.",
+    )
+
+
+async def handle_agent_handoff(payload: SwiftAgentHandoffInput, session: AsyncSession) -> SwiftAgentHandoffResponse:
+    case_id = None
+    ref_display = "Unlinked Session"
+    if payload.reference:
+        stmt = select(Case).where(Case.reference.ilike(payload.reference.strip()))
+        res = await session.execute(stmt)
+        case = res.scalar_one_or_none()
+        if case:
+            case_id = case.id
+            ref_display = case.reference
+            if payload.urgency in ("high", "critical") and case.stage != CaseStage.RESOLVED.value:
+                case.stage = CaseStage.ESCALATED.value
+                case.priority = "critical" if payload.urgency == "critical" else "high"
+                session.add(case)
+                event = CaseEvent(
+                    id=str(uuid.uuid4()),
+                    case_id=case.id,
+                    event_type="human_handoff_requested",
+                    actor="swiftagents_ai",
+                    metadata_json=json.dumps({"reason": payload.reason, "urgency": payload.urgency}),
+                    occurred_at=now_iso(),
+                )
+                session.add(event)
+
+    handoff = AgentHandoff(
+        id=str(uuid.uuid4()),
+        case_id=case_id,
+        event_type="human_handoff_requested",
+        payload_json=json.dumps({
+            "reference": ref_display,
+            "citizen_name": payload.citizen_name,
+            "contact_value": payload.contact_value,
+            "reason": payload.reason,
+            "urgency": payload.urgency,
+        }),
+        status="pending",
+        created_at=now_iso(),
+    )
+    session.add(handoff)
+    await session.commit()
+
+    return SwiftAgentHandoffResponse(
+        handoff_id=handoff.id,
+        status="pending",
+        message="A live Community Liaison Officer has been notified. They are reviewing the case context and will take over this thread shortly.",
     )
 
 

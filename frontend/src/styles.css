@@ -1135,4 +1135,423 @@ textarea:focus {
   gap: 12px;
 }
 
+/* ---------------------------------------------------------------------------
+   SwiftAgent In-App Conversational Chat Modal
+--------------------------------------------------------------------------- */
+
+.swift-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(14, 28, 26, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  padding: 24px;
+}
+
+@media (max-width: 640px) {
+  .swift-modal-backdrop {
+    padding: 0;
+  }
+}
+
+.swift-chat-window {
+  width: 440px;
+  max-width: 100%;
+  height: 640px;
+  max-height: calc(100vh - 48px);
+  background: var(--surface);
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  box-shadow: 0 20px 50px rgba(17, 104, 95, 0.18), 0 4px 16px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: swiftSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (max-width: 640px) {
+  .swift-chat-window {
+    width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+}
+
+@keyframes swiftSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.swift-chat-header {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #0f544d, #11685f);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.swift-header-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.swift-avatar-badge {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  display: grid;
+  place-items: center;
+  position: relative;
+  color: #fff;
+}
+
+.swift-live-indicator {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  background: #34d399;
+  border: 2px solid #0f544d;
+  border-radius: 50%;
+}
+
+.swift-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swift-header-title strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.swift-badge-pill {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.swift-header-sub {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.swift-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swift-btn-handoff {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.swift-btn-handoff:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.swift-btn-close {
+  background: none;
+  border: none;
+  color: #fff;
+  opacity: 0.8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+}
+
+.swift-btn-close:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.swift-messages-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #fbfbf9;
+}
+
+.swift-message-row {
+  display: flex;
+  width: 100%;
+}
+
+.swift-message-row.agent,
+.swift-message-row.officer {
+  justify-content: flex-start;
+}
+
+.swift-message-row.citizen {
+  justify-content: flex-end;
+}
+
+.swift-message-row.system {
+  justify-content: center;
+}
+
+.swift-message-bubble {
+  max-width: 82%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.swift-message-row.agent .swift-message-bubble {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  border-bottom-left-radius: 4px;
+}
+
+.swift-message-row.officer .swift-message-bubble {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #14532d;
+  border-bottom-left-radius: 4px;
+}
+
+.swift-message-row.citizen .swift-message-bubble {
+  background: var(--accent);
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+}
+
+.swift-message-row.system .swift-message-bubble {
+  background: #fffbeb;
+  border: 1px solid #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  text-align: center;
+}
+
+.swift-ticket-card {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #f0f7f6;
+  border: 1px solid #c2e0dc;
+  border-radius: 10px;
+}
+
+.swift-ticket-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.swift-ticket-val {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.swift-ticket-val code {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f544d;
+}
+
+.swift-btn-copy {
+  background: #ffffff;
+  border: 1px solid #c2e0dc;
+  border-radius: 6px;
+  padding: 4px 6px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.swift-ticket-pin {
+  display: block;
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.swift-evidence-chip {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.swift-timestamp {
+  display: block;
+  font-size: 10px;
+  opacity: 0.6;
+  margin-top: 4px;
+  text-align: right;
+}
+
+.swift-message-bubble.typing {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 18px;
+}
+
+.swift-typing-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--muted);
+  border-radius: 50%;
+  animation: swiftBlink 1.4s infinite both;
+}
+
+.swift-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.swift-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes swiftBlink {
+  0%, 80%, 100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
+.swift-quick-chips {
+  padding: 8px 16px;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  background: #fbfbf9;
+  border-top: 1px solid var(--line);
+}
+
+.swift-quick-chips button {
+  white-space: nowrap;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.swift-quick-chips button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.swift-input-bar {
+  padding: 12px 16px;
+  background: #ffffff;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.swift-icon-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  transition: color 0.15s ease;
+}
+
+.swift-icon-btn:hover {
+  color: var(--accent);
+  background: var(--surface-soft);
+}
+
+.swift-text-input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.swift-text-input:focus {
+  border-color: var(--accent);
+}
+
+.swift-send-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.swift-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 

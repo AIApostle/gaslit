@@ -41,6 +41,7 @@ import {
   getEvidence,
   getNotes,
   getPortfolioReport,
+  getAgentToolsCatalog,
   listCases,
   listHandoffs,
   listNotifications,
@@ -49,6 +50,7 @@ import {
   retryNotification,
   transitionCase,
 } from "./api";
+import { SwiftAgentChatModal } from "./components/SwiftAgentChatModal";
 import { useSwiftAgent } from "./hooks/useSwiftAgent";
 import type {
   CaseExport,
@@ -90,64 +92,106 @@ function formatDate(value: string | null | undefined) {
   return value ? new Date(value).toLocaleString() : "Not set";
 }
 
+function getInitialView(): View {
+  const path = window.location.pathname.toLowerCase();
+  const hash = window.location.hash.toLowerCase();
+  if (path.startsWith("/admin") || hash.startsWith("#/admin")) {
+    if (path.includes("reports") || hash.includes("reports")) return "reports";
+    if (path.includes("integration") || hash.includes("integration")) return "integration";
+    if (path.includes("settings") || hash.includes("settings")) return "settings";
+    return "workspace";
+  }
+  return "portal";
+}
+
 export function App() {
-  // Default to public user portal
-  const [view, setView] = useState<View>("portal");
+  const [view, setView] = useState<View>(getInitialView);
   const [toast, setToast] = useState<string | null>(null);
+  const [chatModalOpen, setChatModalOpen] = useState(false);
+  const [chatTopic, setChatTopic] = useState<string | undefined>();
   const { openAgent, isLoaded, config } = useSwiftAgent();
+
+  // Sync view with browser URL and history
+  useEffect(() => {
+    const handleUrlChange = () => {
+      setView(getInitialView());
+    };
+    window.addEventListener("hashchange", handleUrlChange);
+    window.addEventListener("popstate", handleUrlChange);
+    return () => {
+      window.removeEventListener("hashchange", handleUrlChange);
+      window.removeEventListener("popstate", handleUrlChange);
+    };
+  }, []);
+
+  const navigate = (newView: View) => {
+    setView(newView);
+    if (newView === "portal") {
+      window.location.hash = "";
+      if (window.location.pathname.startsWith("/admin")) {
+        window.history.pushState({}, "", "/");
+      }
+    } else {
+      window.location.hash = `#/admin/${newView}`;
+    }
+  };
+
+  const handleOpenChat = (topic?: string) => {
+    setChatTopic(topic);
+    setChatModalOpen(true);
+    if (isLoaded) {
+      openAgent();
+    }
+  };
 
   const isStaffDesk = view !== "portal";
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <button className="brand" type="button" onClick={() => setView("portal")}>
+        <button className="brand" type="button" onClick={() => navigate("portal")}>
           <span className="brand-mark">HC</span>
           <span>
             <strong>Community Voice</strong>
-            <small>{isStaffDesk ? "Staff Case Desk" : "Grievance & Resolution Portal"}</small>
+            <small>{isStaffDesk ? "Officer & Admin Desk" : "Host Community Grievance Service"}</small>
           </span>
         </button>
 
         <nav className="nav-tabs" aria-label="Primary navigation">
           {!isStaffDesk ? (
-            <>
-              <button className="portal-btn-primary" style={{ padding: "8px 18px", fontSize: "13px" }} type="button" onClick={openAgent}>
-                <Bot size={15} />
-                <span>Talk to AI Officer</span>
-              </button>
-              <button
-                className="nav-button"
-                type="button"
-                onClick={() => setView("workspace")}
-                title="Access internal officer & admin case desk"
-                style={{ marginLeft: "12px", border: "1px solid var(--line)" }}
-              >
-                <Lock size={15} />
-                <span>Officer / Admin Desk</span>
-              </button>
-            </>
+            /* Public Portal Navigation: Strictly Citizen Facing, Zero Admin Links */
+            <button
+              className="portal-btn-primary"
+              style={{ padding: "8px 18px", fontSize: "13px" }}
+              type="button"
+              onClick={() => handleOpenChat()}
+            >
+              <Bot size={15} />
+              <span>Talk to AI Officer</span>
+            </button>
           ) : (
+            /* Admin & Officer Desk Navigation: Only accessed via /admin or #/admin */
             <>
               <button
                 className="nav-button"
                 type="button"
-                onClick={() => setView("portal")}
+                onClick={() => navigate("portal")}
                 style={{ marginRight: "12px", fontWeight: 700 }}
+                title="Exit back to the public citizen portal"
               >
                 <ArrowLeft size={16} />
-                <span>Public Portal</span>
+                <span>Exit Admin</span>
               </button>
-              <NavButton active={view === "workspace"} icon={<BriefcaseBusiness size={16} />} onClick={() => setView("workspace")}>
+              <NavButton active={view === "workspace"} icon={<BriefcaseBusiness size={16} />} onClick={() => navigate("workspace")}>
                 Cases
               </NavButton>
-              <NavButton active={view === "reports"} icon={<BarChart3 size={16} />} onClick={() => setView("reports")}>
+              <NavButton active={view === "reports"} icon={<BarChart3 size={16} />} onClick={() => navigate("reports")}>
                 Analytics
               </NavButton>
-              <NavButton active={view === "integration"} icon={<Bell size={16} />} onClick={() => setView("integration")}>
+              <NavButton active={view === "integration"} icon={<Bell size={16} />} onClick={() => navigate("integration")}>
                 SwiftAgents Hub
               </NavButton>
-              <NavButton active={view === "settings"} icon={<KeyRound size={16} />} onClick={() => setView("settings")}>
+              <NavButton active={view === "settings"} icon={<KeyRound size={16} />} onClick={() => navigate("settings")}>
                 Settings
               </NavButton>
             </>
@@ -166,7 +210,7 @@ export function App() {
       )}
 
       <main>
-        {view === "portal" && <PublicCommunityPortal openAgent={openAgent} setToast={setToast} />}
+        {view === "portal" && <PublicCommunityPortal onOpenChat={handleOpenChat} setToast={setToast} />}
         {view === "workspace" && <Workspace setToast={setToast} />}
         {view === "reports" && <Reports />}
         {view === "integration" && <IntegrationMonitor setToast={setToast} openAgent={openAgent} config={config} />}
@@ -177,13 +221,21 @@ export function App() {
       <button
         type="button"
         className="floating-ai-launcher"
-        onClick={openAgent}
+        onClick={() => handleOpenChat()}
         title="Open SwiftAgents AI Grievance Officer"
       >
         <Bot size={18} />
         <span>Chat with AI Officer</span>
-        {isLoaded && <span className="status-dot"></span>}
+        <span className="status-dot"></span>
       </button>
+
+      {/* Interactive SwiftAgents In-App Pop-up Chat */}
+      <SwiftAgentChatModal
+        isOpen={chatModalOpen}
+        onClose={() => setChatModalOpen(false)}
+        initialTopic={chatTopic}
+        onCaseCreated={(ticketId) => setToast(`Incident logged: ${ticketId}`)}
+      />
     </div>
   );
 }
@@ -212,14 +264,12 @@ function NavButton({
 // ---------------------------------------------------------------------------
 
 function PublicCommunityPortal({
-  openAgent,
+  onOpenChat,
   setToast,
 }: {
-  openAgent: () => void;
+  onOpenChat: (topic?: string) => void;
   setToast: (msg: string) => void;
 }) {
-  const [simModalOpen, setSimModalOpen] = useState(false);
-
   return (
     <div className="portal-container">
       {/* Hero Section */}
@@ -235,31 +285,25 @@ function PublicCommunityPortal({
         </p>
 
         <div className="portal-actions">
-          <button type="button" className="portal-btn-primary" onClick={openAgent}>
+          <button type="button" className="portal-btn-primary" onClick={() => onOpenChat()}>
             <Bot size={20} />
             <span>Report Grievance with AI Officer</span>
           </button>
-          <button type="button" className="portal-btn-secondary" onClick={openAgent}>
+          <button type="button" className="portal-btn-secondary" onClick={() => onOpenChat("check status")}>
             <Search size={18} />
             <span>Check Status with AI Assistant</span>
-          </button>
-        </div>
-
-        <div style={{ marginTop: "12px" }}>
-          <button
-            type="button"
-            className="button ghost"
-            style={{ fontSize: "13px", color: "var(--accent)" }}
-            onClick={() => setSimModalOpen(true)}
-          >
-            ⚡ Test Drive In-Browser Tool Simulator
           </button>
         </div>
       </section>
 
       {/* Category Cards (Interactive Launchers for SwiftAgents) */}
       <div className="portal-cards-grid">
-        <button type="button" className="portal-card clickable" onClick={openAgent} title="Launch AI Officer to report gas flaring">
+        <button
+          type="button"
+          className="portal-card clickable"
+          onClick={() => onOpenChat("Gas flaring with heavy black soot fallout")}
+          title="Launch AI Officer to report gas flaring"
+        >
           <div className="portal-card-icon">
             <Flame size={22} />
           </div>
@@ -271,7 +315,12 @@ function PublicCommunityPortal({
           <span className="card-launch-action">Report with AI &rarr;</span>
         </button>
 
-        <button type="button" className="portal-card clickable" onClick={openAgent} title="Launch AI Officer to report oil spills">
+        <button
+          type="button"
+          className="portal-card clickable"
+          onClick={() => onOpenChat("Crude oil pipeline rupture leak in farmland")}
+          title="Launch AI Officer to report oil spills"
+        >
           <div className="portal-card-icon">
             <Droplets size={22} />
           </div>
@@ -283,7 +332,12 @@ function PublicCommunityPortal({
           <span className="card-launch-action">Report with AI &rarr;</span>
         </button>
 
-        <button type="button" className="portal-card clickable" onClick={openAgent} title="Launch AI Officer to report water contamination">
+        <button
+          type="button"
+          className="portal-card clickable"
+          onClick={() => onOpenChat("Water borehole contamination and chemical odor")}
+          title="Launch AI Officer to report water contamination"
+        >
           <div className="portal-card-icon">
             <Trees size={22} />
           </div>
@@ -341,16 +395,6 @@ function PublicCommunityPortal({
           <span>Integrated with SwiftAgents Conversational AI &amp; Neon Serverless Postgres</span>
         </div>
       </footer>
-
-      {/* In-Browser Tool Simulator Modal */}
-      {simModalOpen && (
-        <AiSimulatorModal
-          onClose={() => setSimModalOpen(false)}
-          onSuccess={(ticket) => {
-            setToast(`AI Grievance Logged: ${ticket.ticket_id}`);
-          }}
-        />
-      )}
     </div>
   );
 }
@@ -723,107 +767,6 @@ function NextStageButton({ stage, onTransition }: { stage: CaseStage; onTransiti
   );
 }
 
-function AiSimulatorModal({
-  onClose,
-  onSuccess,
-}: {
-  onClose: () => void;
-  onSuccess: (res: SwiftAgentToolResponse) => void;
-}) {
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("Gas Flaring");
-  const [location, setLocation] = useState("Rumuekpe Community");
-  const [complainant, setComplainant] = useState("Madam Joy");
-  const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<SwiftAgentToolResponse | null>(null);
-
-  async function handleSimulate(e: FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const res = await agentSubmitComplaint({
-        complainant_name: complainant,
-        description,
-        category,
-        location,
-        preferred_channel: "in_browser_chat",
-      });
-      setResponse(res);
-      onSuccess(res);
-    } catch (err) {
-      alert("Failed to submit tool call");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="ai-sim-modal-backdrop" onClick={onClose}>
-      <div className="ai-sim-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="ai-sim-modal-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Bot size={20} color="#11685f" />
-            <h3 style={{ margin: 0 }}>SwiftAgents In-Browser Tool Simulator</h3>
-          </div>
-          <button type="button" className="button ghost" onClick={onClose}>
-            <X size={16} />
-          </button>
-        </div>
-        <p style={{ margin: 0, fontSize: "13px", color: "var(--muted)" }}>
-          Simulates the natural language interaction where SwiftAgents executes <code>POST /v1/agent/complaints</code> and renders a ticket badge.
-        </p>
-
-        {!response ? (
-          <form onSubmit={handleSimulate} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-            <label className="field">
-              <span>Complainant Name</span>
-              <input value={complainant} onChange={(e) => setComplainant(e.target.value)} required />
-            </label>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
-              <label className="field">
-                <span>Category</span>
-                <input value={category} onChange={(e) => setCategory(e.target.value)} required />
-              </label>
-              <label className="field">
-                <span>Location / Site</span>
-                <input value={location} onChange={(e) => setLocation(e.target.value)} required />
-              </label>
-            </div>
-            <label className="field">
-              <span>What happened? (Natural Language Message)</span>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Describe the flare heat, soot, pipeline leak, or blocked road..."
-                required
-                rows={3}
-              />
-            </label>
-            <button type="submit" className="button primary" disabled={loading}>
-              {loading ? "Agent Processing..." : "Execute AI Tool Call"}
-            </button>
-          </form>
-        ) : (
-          <div className="ai-chat-preview">
-            <div className="ai-chat-msg user">
-              <span>{description}</span>
-            </div>
-            <div className="ai-chat-msg agent">
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
-                <span className="ai-pill">{response.badge.label}: {response.badge.value}</span>
-                <span style={{ fontSize: "11px", color: "var(--muted)" }}>Status: {response.status}</span>
-              </div>
-              <p style={{ margin: 0, whiteSpace: "pre-line" }}>{response.message}</p>
-            </div>
-            <button type="button" className="button ghost" onClick={() => setResponse(null)} style={{ alignSelf: "center", marginTop: "8px" }}>
-              Test Another Tool Call
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function Reports() {
   const [report, setReport] = useState<PortfolioReport | null>(null);

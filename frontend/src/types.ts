@@ -140,6 +140,44 @@ export type SwiftAgentToolResponse = {
   badge: { label: string; value: string };
 };
 
+export type SwiftAgentLookupResponse = {
+  found: boolean;
+  reference: string;
+  stage: string;
+  category: string;
+  location: string;
+  assigned_officer: string | null;
+  sla_status: string;
+  sla_due_at: string | null;
+  latest_update: string | null;
+  summary_markdown: string;
+};
+
+export type SwiftAgentEvidenceResponse = {
+  success: boolean;
+  evidence_id: string;
+  reference: string;
+  message: string;
+};
+
+export type SwiftAgentHandoffResponse = {
+  handoff_id: string;
+  status: string;
+  message: string;
+};
+
+export type SwiftAgentToolCatalog = {
+  version: string;
+  description: string;
+  tools: Array<{
+    name: string;
+    description: string;
+    method: string;
+    endpoint: string;
+    parameters: Record<string, unknown>;
+  }>;
+};
+
 declare global {
   interface Window {
     SwiftAgentWidget?: {

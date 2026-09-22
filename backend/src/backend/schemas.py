@@ -30,12 +30,12 @@ class SlaStatus(StrEnum):
 
 
 class ComplaintIntake(BaseModel):
-    complainant_name: str = Field(min_length=2, max_length=160)
-    contact_value: str = Field(min_length=4, max_length=160)
+    complainant_name: str = Field(default="Community Member", min_length=1, max_length=160)
+    contact_value: str = Field(default="in-app-session", min_length=1, max_length=160)
     preferred_channel: ContactChannel = ContactChannel.IN_BROWSER_CHAT
-    category: str = Field(min_length=2, max_length=100)
-    description: str = Field(min_length=10, max_length=5000)
-    location: str = Field(min_length=2, max_length=240)
+    category: str = Field(default="Environmental Grievance", min_length=2, max_length=100)
+    description: str = Field(min_length=3, max_length=5000)
+    location: str = Field(default="Host Community Sector", min_length=1, max_length=240)
     occurred_at: datetime | None = None
     source_channel: str = Field(default="web", max_length=40)
     priority: str = Field(default="normal", pattern="^(low|normal|high|critical)$")
@@ -47,12 +47,12 @@ class ComplaintIntake(BaseModel):
 
 
 class SwiftAgentComplaintInput(BaseModel):
-    complainant_name: str = Field(default="Community Member", min_length=2, max_length=160)
-    contact_value: str = Field(default="in-app-session", min_length=3, max_length=160)
+    complainant_name: str = Field(default="Community Member", min_length=1, max_length=160)
+    contact_value: str = Field(default="in-app-session", min_length=1, max_length=160)
     preferred_channel: ContactChannel = ContactChannel.IN_BROWSER_CHAT
     category: str = Field(default="Environmental Grievance", min_length=2, max_length=100)
-    description: str = Field(min_length=5, max_length=5000)
-    location: str = Field(default="Host Community Site", min_length=2, max_length=240)
+    description: str = Field(min_length=3, max_length=5000)
+    location: str = Field(default="Host Community Site", min_length=1, max_length=240)
     occurred_at: datetime | None = None
     priority: str = Field(default="normal", pattern="^(low|normal|high|critical)$")
 

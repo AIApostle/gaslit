@@ -34,6 +34,28 @@ export class ApiError extends Error {
   }
 }
 
+function formatApiErrorMessage(detail: unknown): string {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "object" && item !== null) {
+          const locArr = Array.isArray(item.loc) ? item.loc : [];
+          const field = locArr.length > 0 ? String(locArr[locArr.length - 1]) : "";
+          const msg = item.msg || item.message || JSON.stringify(item);
+          return field ? `${msg} (${field})` : msg;
+        }
+        return String(item);
+      })
+      .join(", ");
+  }
+  if (typeof detail === "object" && detail !== null) {
+    const obj = detail as Record<string, unknown>;
+    return (obj.message as string) || (obj.error as string) || (obj.detail as string) || JSON.stringify(detail);
+  }
+  return "Request failed";
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const staffKey = import.meta.env.VITE_STAFF_API_KEY || localStorage.getItem("staffApiKey") || "gaslit001";
   const headers = new Headers(options.headers);
@@ -58,7 +80,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new ApiError(body.detail ?? "Request failed", response.status);
+    const message = formatApiErrorMessage(body.detail);
+    throw new ApiError(message, response.status);
   }
   return response.json() as Promise<T>;
 }

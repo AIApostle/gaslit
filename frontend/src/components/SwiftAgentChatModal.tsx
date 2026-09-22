@@ -190,6 +190,27 @@ export function SwiftAgentChatModal({
       }
     }
 
+    // Conversational Greeting & Inquiry Handling
+    const trimmed = userText.trim();
+    const isGreeting = /^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|hola|greetings)\b/i.test(trimmed) && trimmed.split(/\s+/).length <= 4;
+    const isHelp = /^(help|what\s*can\s*you\s*do|who\s*are\s*you|how\s*does\s*this\s*work)\b/i.test(trimmed);
+
+    if (isGreeting || isHelp) {
+      setTimeout(() => {
+        setIsTyping(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `agent-${Date.now()}`,
+            sender: "agent",
+            text: "Hello! I am your **Host Community Case Assistant**.\n\nI can help you:\n• **Report an environmental or community grievance** (gas flaring, soot, oil spills, polluted drinking water, or infrastructure damage)\n• **Check status of an existing case** (e.g. `HCC-20260922-A1B2`)\n• **Upload evidence** photos and documents\n• **Connect with a human Community Liaison Officer**\n\nHow can I help you today? Please describe what happened in your community.",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ]);
+      }, 500);
+      return;
+    }
+
     let inferredCategory = "Environmental Grievance";
     if (lower.includes("flare") || lower.includes("soot") || lower.includes("smoke")) {
       inferredCategory = "Gas Flaring & Soot";
@@ -200,10 +221,14 @@ export function SwiftAgentChatModal({
     }
 
     try {
+      let descriptionText = userText.trim();
+      if (descriptionText.length < 3) {
+        descriptionText = `Incident report: ${descriptionText}`;
+      }
 
       const res = await agentSubmitComplaint({
         category: inferredCategory,
-        description: userText,
+        description: descriptionText,
         location: "Host Community Sector",
         priority: lower.includes("explosion") || lower.includes("poison") || lower.includes("burst") ? "critical" : "normal",
         preferred_channel: "in_browser_chat",

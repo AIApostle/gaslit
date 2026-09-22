@@ -194,6 +194,23 @@ export function SwiftAgentChatModal({
     const trimmed = userText.trim();
     const isGreeting = /^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|hola|greetings)\b/i.test(trimmed) && trimmed.split(/\s+/).length <= 4;
     const isHelp = /^(help|what\s*can\s*you\s*do|who\s*are\s*you|how\s*does\s*this\s*work)\b/i.test(trimmed);
+    const isToolQuery = /(what\s+tools?|tools?\s+do\s+you|which\s+tools?|available\s+tools?|list\s+tools?|tools?\s+access)/i.test(trimmed);
+
+    if (isToolQuery) {
+      setTimeout(() => {
+        setIsTyping(false);
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `agent-${Date.now()}`,
+            sender: "agent",
+            text: "### Integrated Autonomous Tools\n\nI have direct access to 4 programmatic tools connected to your live database:\n\n1. **`submit_complaint`**: Logs official grievances (gas flares, oil spills, water contamination) and generates verified Ticket IDs with secret PINs.\n2. **`lookup_case`**: Retrieves live investigation stage, assigned officer, notes, and SLA status for an existing ticket.\n3. **`attach_evidence`**: Binds photos, incident PDFs, and evidence files to an active ticket.\n4. **`request_human_handoff`**: Escalates critical sessions to a human Community Liaison Officer.\n\nTo use any of these, simply describe what happened or paste your Ticket ID!",
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ]);
+      }, 500);
+      return;
+    }
 
     if (isGreeting || isHelp) {
       setTimeout(() => {

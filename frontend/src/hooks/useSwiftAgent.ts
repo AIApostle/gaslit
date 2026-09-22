@@ -58,11 +58,20 @@ export function useSwiftAgent() {
     };
   }, []);
 
+  const [pendingOpen, setPendingOpen] = useState(false);
+
+  useEffect(() => {
+    if (isLoaded && pendingOpen && window.SwiftAgentWidget) {
+      window.SwiftAgentWidget.open();
+      setPendingOpen(false);
+    }
+  }, [isLoaded, pendingOpen]);
+
   const openAgent = () => {
     if (window.SwiftAgentWidget) {
       window.SwiftAgentWidget.open();
     } else {
-      console.warn("SwiftAgentWidget is not loaded yet.");
+      setPendingOpen(true);
     }
   };
 
@@ -75,6 +84,8 @@ export function useSwiftAgent() {
   const toggleAgent = () => {
     if (window.SwiftAgentWidget) {
       window.SwiftAgentWidget.toggle();
+    } else {
+      setPendingOpen(true);
     }
   };
 

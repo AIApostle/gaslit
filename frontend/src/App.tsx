@@ -48,7 +48,6 @@ import {
   retryNotification,
   transitionCase,
 } from "./api";
-import { SwiftAgentChatModal } from "./components/SwiftAgentChatModal";
 import { useSwiftAgent } from "./hooks/useSwiftAgent";
 import type {
   CaseExport,
@@ -105,8 +104,6 @@ function getInitialView(): View {
 export function App() {
   const [view, setView] = useState<View>(getInitialView);
   const [toast, setToast] = useState<string | null>(null);
-  const [chatModalOpen, setChatModalOpen] = useState(false);
-  const [chatTopic, setChatTopic] = useState<string | undefined>();
   const { openAgent, isLoaded, config } = useSwiftAgent();
 
   // Sync view with browser URL and history
@@ -134,13 +131,11 @@ export function App() {
     }
   };
 
-  const handleOpenChat = (topic?: string) => {
-    setChatTopic(topic);
-    if (isLoaded && window.SwiftAgentWidget) {
-      openAgent();
-    } else {
-      setChatModalOpen(true);
+  const handleOpenChat = () => {
+    if (!isLoaded) {
+      setToast("Connecting to SwiftAgents AI Officer...");
     }
+    openAgent();
   };
 
   const isStaffDesk = view !== "portal";
@@ -215,28 +210,6 @@ export function App() {
         {view === "integration" && <IntegrationMonitor setToast={setToast} openAgent={openAgent} config={config} />}
         {view === "settings" && <Settings setToast={setToast} config={config} />}
       </main>
-
-      {/* Floating launcher fallback: only shown if official SwiftAgents CDN widget is not loaded */}
-      {!isLoaded && (
-        <button
-          type="button"
-          className="floating-ai-launcher"
-          onClick={() => handleOpenChat()}
-          title="Open AI Grievance Officer"
-        >
-          <Bot size={18} />
-          <span>Chat with AI Officer</span>
-          <span className="status-dot"></span>
-        </button>
-      )}
-
-      {/* Interactive SwiftAgents In-App Pop-up Chat */}
-      <SwiftAgentChatModal
-        isOpen={chatModalOpen}
-        onClose={() => setChatModalOpen(false)}
-        initialTopic={chatTopic}
-        onCaseCreated={(ticketId) => setToast(`Incident logged: ${ticketId}`)}
-      />
     </div>
   );
 }

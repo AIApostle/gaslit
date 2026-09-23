@@ -15,6 +15,7 @@ import {
   FolderOpen,
   Gauge,
   Lock,
+  Megaphone,
   Plus,
   RefreshCw,
   Search,
@@ -144,10 +145,12 @@ export function App() {
     <div className="app-shell">
       <header className="topbar">
         <button className="brand" type="button" onClick={() => navigate("portal")}>
-          <span className="brand-mark">HC</span>
+          <span className="brand-mark" title="Outloud">
+            <Megaphone size={19} strokeWidth={2.4} />
+          </span>
           <span>
-            <strong>Community Voice</strong>
-            <small>{isStaffDesk ? "Officer & Admin Desk" : "Host Community Grievance Service"}</small>
+            <strong>Outloud</strong>
+            <small>{isStaffDesk ? "Officer & Admin Desk" : "Community Voice & Grievance Platform"}</small>
           </span>
         </button>
 
@@ -250,11 +253,11 @@ function PublicCommunityPortal({
       <section className="portal-hero">
         <div className="portal-badge">
           <Sparkles size={15} />
-          <span>Official Host Community Grievance Service</span>
+          <span>Official Outloud Grievance Service</span>
         </div>
-        <h1>Report Host Community Grievances Directly. No Paperwork. No Delays.</h1>
+        <h1>Speak Up Out Loud. Report Host Community Grievances Directly.</h1>
         <p>
-          Speak or chat in natural language with our conversational AI officer. Describe what happened,
+          Speak out loud or chat in natural language with our conversational AI officer. Describe what happened,
           upload incident photos, and receive your official verified case tracking badge in seconds.
         </p>
 
@@ -329,7 +332,7 @@ function PublicCommunityPortal({
         <div className="portal-steps-head">
           <h2>How It Works</h2>
           <p className="muted" style={{ margin: 0, fontSize: "14px" }}>
-            A transparent 3-step process ensuring every community voice is documented and resolved.
+            A transparent 3-step process ensuring every voice spoken out loud is documented and resolved.
           </p>
         </div>
         <div className="portal-steps-grid">
@@ -364,7 +367,7 @@ function PublicCommunityPortal({
 
       {/* Footer */}
       <footer className="portal-footer">
-        <div>Host Community Case Desk &copy; {new Date().getFullYear()} • Secure & Privacy Preserving</div>
+        <div>Outloud &copy; {new Date().getFullYear()} • Secure & Privacy Preserving</div>
       </footer>
     </div>
   );

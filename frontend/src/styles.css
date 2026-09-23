@@ -98,12 +98,16 @@ svg {
   place-items: center;
   width: 38px;
   height: 38px;
-  border-radius: 7px;
-  background: var(--accent);
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-strong));
   color: #fff;
-  font-size: 12px;
-  font-weight: 900;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(17, 104, 95, 0.28);
+  transition: transform 0.15s ease;
+}
+
+.brand:hover .brand-mark {
+  transform: scale(1.05);
 }
 
 .brand strong,

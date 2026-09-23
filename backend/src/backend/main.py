@@ -69,7 +69,7 @@ async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(
-    title="Host Community Grievance & Case Management API",
+    title="Outloud — Community Voice & Grievance Platform API",
     version="0.2.0",
     lifespan=lifespan,
 )
@@ -210,7 +210,7 @@ def get_swiftagents_tool_catalog(request: Request) -> dict[str, Any]:
 
     return {
         "version": "1.0.0",
-        "description": "Host Community Case Desk AI Agent Tool Suite",
+        "description": "Outloud AI Agent Tool Suite",
         "server_url": base_url,
         "catalog_url": f"{base_url}/v1/agent/tools.json",
         "webhook_url": f"{base_url}/v1/agent/webhook",

@@ -56,8 +56,60 @@ function formatApiErrorMessage(detail: unknown): string {
   return "Request failed";
 }
 
+export function getStaffKey(): string {
+  return (
+    sessionStorage.getItem("outloud_staff_key") ||
+    localStorage.getItem("outloud_staff_key") ||
+    import.meta.env.VITE_STAFF_API_KEY ||
+    ""
+  );
+}
+
+export function setStaffKey(key: string, persist = false): void {
+  sessionStorage.setItem("outloud_staff_key", key);
+  if (persist) {
+    localStorage.setItem("outloud_staff_key", key);
+  } else {
+    localStorage.removeItem("outloud_staff_key");
+  }
+}
+
+export function clearStaffKey(): void {
+  sessionStorage.removeItem("outloud_staff_key");
+  localStorage.removeItem("outloud_staff_key");
+}
+
+export async function verifyStaffAuth(key: string): Promise<{ authenticated: boolean; role: string; name: string }> {
+  const headers = new Headers({ "Content-Type": "application/json", "X-Staff-Key": key });
+  const primaryUrl = `${CONFIGURED_API_BASE}/v1/auth/verify-staff`;
+  let res: Response;
+  try {
+    res = await fetch(primaryUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ key }),
+    });
+  } catch (err) {
+    if (CONFIGURED_API_BASE === "" && PRODUCTION_API_URL) {
+      res = await fetch(`${PRODUCTION_API_URL}/v1/auth/verify-staff`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ key }),
+      });
+    } else {
+      throw err;
+    }
+  }
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(formatApiErrorMessage(body.detail) || "Invalid staff credentials.", res.status);
+  }
+  return res.json();
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const staffKey = import.meta.env.VITE_STAFF_API_KEY || localStorage.getItem("staffApiKey") || "gaslit001";
+  const staffKey = getStaffKey();
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
   if (staffKey) {

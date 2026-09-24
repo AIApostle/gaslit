@@ -2,12 +2,40 @@ import { useEffect, useState } from "react";
 import { getSwiftAgentConfig } from "../api";
 import type { SwiftAgentConfig } from "../types";
 
-export function useSwiftAgent() {
+export function useSwiftAgent(enabled: boolean = true) {
   const [config, setConfig] = useState<SwiftAgentConfig | null>(null);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // If disabled (e.g. on admin dashboard), hide and close any active widget
+    if (!enabled) {
+      try {
+        if (window.SwiftAgentWidget?.close) {
+          window.SwiftAgentWidget.close();
+        }
+      } catch {
+        // ignore
+      }
+      const existingWidgets = document.querySelectorAll(
+        "#swiftagents-widget-container, [id*='swiftagent'], [class*='swiftagent'], iframe[src*='swiftagents']"
+      );
+      existingWidgets.forEach((el) => {
+        (el as HTMLElement).style.setProperty("display", "none", "important");
+        (el as HTMLElement).style.setProperty("visibility", "hidden", "important");
+      });
+      return;
+    }
+
+    // When enabled (public citizen portal), restore visibility
+    const existingWidgets = document.querySelectorAll(
+      "#swiftagents-widget-container, [id*='swiftagent'], [class*='swiftagent'], iframe[src*='swiftagents']"
+    );
+    existingWidgets.forEach((el) => {
+      (el as HTMLElement).style.removeProperty("display");
+      (el as HTMLElement).style.removeProperty("visibility");
+    });
+
     let mounted = true;
 
     async function initWidget() {
@@ -23,7 +51,7 @@ export function useSwiftAgent() {
           return;
         }
 
-        // Dynamically load script
+        // Dynamically load script only on public portal
         const script = document.createElement("script");
         script.id = "swiftagents-widget-script";
         script.src = cfg.widget_url || "https://widget.swiftagents.org/dist/widget-ui.js";
@@ -56,7 +84,7 @@ export function useSwiftAgent() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [enabled]);
 
   const [pendingOpen, setPendingOpen] = useState(false);
 

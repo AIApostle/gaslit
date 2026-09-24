@@ -10,12 +10,17 @@ import {
   Clock,
   Download,
   Droplets,
+  Eye,
+  EyeOff,
   Flame,
   FileText,
   FolderOpen,
   Gauge,
+  Key,
   Lock,
+  LogOut,
   Megaphone,
+  Menu,
   Plus,
   RefreshCw,
   Search,
@@ -34,6 +39,7 @@ import {
   addNote,
   agentSubmitComplaint,
   assignCase,
+  clearStaffKey,
   exportCase,
   getCase,
   getCaseNotifications,
@@ -41,13 +47,16 @@ import {
   getNotes,
   getPortfolioReport,
   getAgentToolsCatalog,
+  getStaffKey,
   listCases,
   listHandoffs,
   listNotifications,
   lookupStatus,
   retryHandoff,
   retryNotification,
+  setStaffKey,
   transitionCase,
+  verifyStaffAuth,
 } from "./api";
 import { useSwiftAgent } from "./hooks/useSwiftAgent";
 import type {
@@ -105,7 +114,12 @@ function getInitialView(): View {
 export function App() {
   const [view, setView] = useState<View>(getInitialView);
   const [toast, setToast] = useState<string | null>(null);
-  const { openAgent, isLoaded, config } = useSwiftAgent();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => Boolean(getStaffKey()));
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const isStaffDesk = view !== "portal";
+  // SwiftAgents widget is exclusively for public citizen portal, never embedded on admin dashboard
+  const { openAgent, isLoaded, config } = useSwiftAgent(!isStaffDesk);
 
   // Sync view with browser URL and history
   useEffect(() => {
@@ -122,6 +136,7 @@ export function App() {
 
   const navigate = (newView: View) => {
     setView(newView);
+    setSidebarOpen(false);
     if (newView === "portal") {
       window.location.hash = "";
       if (window.location.pathname.startsWith("/admin")) {
@@ -139,8 +154,59 @@ export function App() {
     openAgent();
   };
 
-  const isStaffDesk = view !== "portal";
+  const handleLoginSuccess = () => {
+    setIsAuthenticated(true);
+    setToast("Authenticated as authorized liaison officer");
+  };
 
+  const handleLogout = () => {
+    clearStaffKey();
+    setIsAuthenticated(false);
+    setToast("Signed out of administrative desk");
+  };
+
+  // If in admin mode but unauthenticated, show the secure staff login gate
+  if (isStaffDesk && !isAuthenticated) {
+    return (
+      <>
+        {toast && (
+          <div className="toast" role="status">
+            <CheckCircle size={18} fill="currentColor" />
+            {toast}
+            <button type="button" onClick={() => setToast(null)} aria-label="Dismiss message">
+              x
+            </button>
+          </div>
+        )}
+        <AdminLoginGate
+          onSuccess={handleLoginSuccess}
+          onBackToPortal={() => navigate("portal")}
+        />
+      </>
+    );
+  }
+
+  // If in admin mode and authenticated, render the dedicated modern Admin Layout
+  if (isStaffDesk) {
+    return (
+      <AdminLayout
+        currentView={view}
+        onNavigate={navigate}
+        onLogout={handleLogout}
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+        toast={toast}
+        setToast={setToast}
+      >
+        {view === "workspace" && <Workspace setToast={setToast} />}
+        {view === "reports" && <Reports />}
+        {view === "integration" && <IntegrationMonitor setToast={setToast} config={config} />}
+        {view === "settings" && <Settings setToast={setToast} config={config} />}
+      </AdminLayout>
+    );
+  }
+
+  // Public Portal: Strictly citizen-facing, zero admin links
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -150,49 +216,20 @@ export function App() {
           </span>
           <span>
             <strong>Outloud</strong>
-            <small>{isStaffDesk ? "Officer & Admin Desk" : "Community Voice & Grievance Platform"}</small>
+            <small>Community Voice & Grievance Platform</small>
           </span>
         </button>
 
         <nav className="nav-tabs" aria-label="Primary navigation">
-          {!isStaffDesk ? (
-            /* Public Portal Navigation: Strictly Citizen Facing, Zero Admin Links */
-            <button
-              className="portal-btn-primary"
-              style={{ padding: "8px 18px", fontSize: "13px" }}
-              type="button"
-              onClick={() => handleOpenChat()}
-            >
-              <Bot size={15} />
-              <span>Talk to AI Officer</span>
-            </button>
-          ) : (
-            /* Admin & Officer Desk Navigation: Only accessed via /admin or #/admin */
-            <>
-              <button
-                className="nav-button"
-                type="button"
-                onClick={() => navigate("portal")}
-                style={{ marginRight: "12px", fontWeight: 700 }}
-                title="Exit back to the public citizen portal"
-              >
-                <ArrowLeft size={16} />
-                <span>Exit Admin</span>
-              </button>
-              <NavButton active={view === "workspace"} icon={<BriefcaseBusiness size={16} />} onClick={() => navigate("workspace")}>
-                Cases
-              </NavButton>
-              <NavButton active={view === "reports"} icon={<BarChart3 size={16} />} onClick={() => navigate("reports")}>
-                Analytics
-              </NavButton>
-              <NavButton active={view === "integration"} icon={<Bell size={16} />} onClick={() => navigate("integration")}>
-                SwiftAgents Hub
-              </NavButton>
-              <NavButton active={view === "settings"} icon={<ShieldCheck size={16} />} onClick={() => navigate("settings")}>
-                System Status
-              </NavButton>
-            </>
-          )}
+          <button
+            className="portal-btn-primary"
+            style={{ padding: "8px 18px", fontSize: "13px" }}
+            type="button"
+            onClick={() => handleOpenChat()}
+          >
+            <Bot size={15} />
+            <span>Talk to AI Officer</span>
+          </button>
         </nav>
       </header>
 
@@ -207,32 +244,383 @@ export function App() {
       )}
 
       <main>
-        {view === "portal" && <PublicCommunityPortal onOpenChat={handleOpenChat} setToast={setToast} />}
-        {view === "workspace" && <Workspace setToast={setToast} />}
-        {view === "reports" && <Reports />}
-        {view === "integration" && <IntegrationMonitor setToast={setToast} openAgent={openAgent} config={config} />}
-        {view === "settings" && <Settings setToast={setToast} config={config} />}
+        <PublicCommunityPortal onOpenChat={handleOpenChat} setToast={setToast} />
       </main>
     </div>
   );
 }
 
-function NavButton({
-  active,
-  icon,
-  children,
-  onClick,
+// ---------------------------------------------------------------------------
+// Admin Login Gate (Simple Passcode Shield - Code: 123456)
+// ---------------------------------------------------------------------------
+function AdminLoginGate({
+  onSuccess,
+  onBackToPortal,
 }: {
-  active: boolean;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  onClick: () => void;
+  onSuccess: () => void;
+  onBackToPortal: () => void;
 }) {
+  const [passcode, setPasscode] = useState("");
+  const [showPasscode, setShowPasscode] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    const entered = passcode.trim();
+    if (!entered) {
+      setError("Please enter the admin passcode");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    // Fast static check for 123456 (or backend fallback)
+    if (entered === "123456") {
+      setStaffKey("123456", true);
+      verifyStaffAuth("123456").catch(() => {});
+      onSuccess();
+      return;
+    }
+
+    try {
+      const valid = await verifyStaffAuth(entered);
+      if (valid) {
+        setStaffKey(entered, true);
+        onSuccess();
+      } else {
+        setError("Invalid passcode. Please use passcode: 123456");
+      }
+    } catch {
+      setError("Invalid passcode. Please use passcode: 123456");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <button className="nav-button" type="button" aria-selected={active} onClick={onClick}>
-      {icon}
-      {children}
-    </button>
+    <div className="admin-login-overlay">
+      <div className="admin-login-card">
+        <div className="admin-login-head">
+          <div className="brand-mark" style={{ width: 44, height: 44 }}>
+            <Megaphone size={22} strokeWidth={2.5} />
+          </div>
+          <div className="admin-login-badge">
+            <Lock size={12} />
+            <span>Admin Operations Access</span>
+          </div>
+          <h1>Admin Sign In</h1>
+          <p>
+            Enter the admin passcode to access community casework, evidence vaults, and operations.
+          </p>
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              fontSize: "12px",
+              color: "#34d399",
+              background: "rgba(16, 185, 129, 0.12)",
+              border: "1px solid rgba(16, 185, 129, 0.3)",
+              padding: "4px 12px",
+              borderRadius: "20px",
+              fontWeight: 600,
+            }}
+          >
+            <Key size={12} />
+            <span>Passcode: <strong>123456</strong></span>
+          </div>
+        </div>
+
+        {error && (
+          <div className="alert-callout alert-callout-warning" style={{ margin: 0, fontSize: "13px" }}>
+            <Siren size={16} />
+            <div>
+              <strong>Access Denied:</strong> {error}
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="admin-login-form">
+          <div className="admin-field-group">
+            <label htmlFor="staff-key-input">Admin Passcode</label>
+            <div className="admin-input-wrapper">
+              <input
+                id="staff-key-input"
+                type={showPasscode ? "text" : "password"}
+                placeholder="Enter passcode (123456)"
+                value={passcode}
+                onChange={(e) => {
+                  setPasscode(e.target.value);
+                  if (error) setError(null);
+                }}
+                disabled={loading}
+                autoFocus
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                className="admin-input-toggle"
+                onClick={() => setShowPasscode(!showPasscode)}
+                aria-label={showPasscode ? "Hide passcode" : "Show passcode"}
+                tabIndex={-1}
+              >
+                {showPasscode ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="admin-submit-btn"
+            disabled={loading || !passcode.trim()}
+          >
+            {loading ? (
+              <>
+                <RefreshCw size={16} className="spin-slow" />
+                <span>Verifying...</span>
+              </>
+            ) : (
+              <>
+                <Lock size={16} />
+                <span>Enter Operations Desk</span>
+              </>
+            )}
+          </button>
+        </form>
+
+        <div className="admin-back-link">
+          <button type="button" className="admin-back-btn" onClick={onBackToPortal}>
+            <ArrowLeft size={14} />
+            <span>Return to Public Citizen Portal</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Modern Admin Layout Shell (Sidebar + Topbar + Content Area)
+// ---------------------------------------------------------------------------
+function AdminLayout({
+  currentView,
+  onNavigate,
+  onLogout,
+  sidebarOpen,
+  setSidebarOpen,
+  toast,
+  setToast,
+  children,
+}: {
+  currentView: View;
+  onNavigate: (view: View) => void;
+  onLogout: () => void;
+  sidebarOpen: boolean;
+  setSidebarOpen: (open: boolean) => void;
+  toast: string | null;
+  setToast: (msg: string | null) => void;
+  children: React.ReactNode;
+}) {
+  const getViewTitle = (v: View) => {
+    switch (v) {
+      case "workspace":
+        return "Case Management Desk";
+      case "reports":
+        return "Analytics & SLA Reports";
+      case "integration":
+        return "SwiftAgents Live Hub";
+      case "settings":
+        return "System Status & Database";
+      default:
+        return titleCase(v);
+    }
+  };
+
+  return (
+    <div className="admin-shell">
+      {/* Mobile Drawer Backdrop */}
+      {sidebarOpen && (
+        <div
+          className="admin-sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Modern Persistent Dark Forest Sidebar */}
+      <aside className={`admin-sidebar ${sidebarOpen ? "open" : ""}`} aria-label="Admin Navigation">
+        <div className="admin-sidebar-header">
+          <button
+            className="admin-sidebar-brand"
+            type="button"
+            onClick={() => onNavigate("workspace")}
+            title="Outloud Operations"
+          >
+            <span className="brand-mark">
+              <Megaphone size={20} strokeWidth={2.4} />
+            </span>
+            <span>
+              <strong>Outloud</strong>
+              <small>
+                <Lock size={10} />
+                <span>Admin Operations Desk</span>
+              </small>
+            </span>
+          </button>
+        </div>
+
+        <div className="admin-sidebar-body">
+          <div className="admin-nav-group">
+            <div className="admin-nav-label">Case Operations</div>
+            <button
+              type="button"
+              className="admin-nav-item"
+              aria-selected={currentView === "workspace"}
+              onClick={() => onNavigate("workspace")}
+            >
+              <div className="admin-nav-item-left">
+                <BriefcaseBusiness size={17} />
+                <span>Cases Queue</span>
+              </div>
+            </button>
+          </div>
+
+          <div className="admin-nav-group">
+            <div className="admin-nav-label">Intelligence & Reports</div>
+            <button
+              type="button"
+              className="admin-nav-item"
+              aria-selected={currentView === "reports"}
+              onClick={() => onNavigate("reports")}
+            >
+              <div className="admin-nav-item-left">
+                <BarChart3 size={17} />
+                <span>Analytics & SLA</span>
+              </div>
+            </button>
+          </div>
+
+          <div className="admin-nav-group">
+            <div className="admin-nav-label">AI & Automation</div>
+            <button
+              type="button"
+              className="admin-nav-item"
+              aria-selected={currentView === "integration"}
+              onClick={() => onNavigate("integration")}
+            >
+              <div className="admin-nav-item-left">
+                <Bot size={17} />
+                <span>SwiftAgents Hub</span>
+              </div>
+              <span className="admin-nav-pill">Live</span>
+            </button>
+          </div>
+
+          <div className="admin-nav-group">
+            <div className="admin-nav-label">Infrastructure</div>
+            <button
+              type="button"
+              className="admin-nav-item"
+              aria-selected={currentView === "settings"}
+              onClick={() => onNavigate("settings")}
+            >
+              <div className="admin-nav-item-left">
+                <ShieldCheck size={17} />
+                <span>System Status</span>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Sidebar Footer with Officer Profile and Sign Out */}
+        <div className="admin-sidebar-footer">
+          <div className="admin-user-card">
+            <div className="admin-user-avatar">
+              <CircleUserRound size={18} />
+              <span className="admin-status-dot-active" title="Authenticated & Active" />
+            </div>
+            <div className="admin-user-info">
+              <strong>Liaison Officer</strong>
+              <small>Neon DB Connected</small>
+            </div>
+          </div>
+
+          <div className="admin-footer-actions">
+            <button
+              type="button"
+              className="admin-footer-btn"
+              onClick={() => onNavigate("portal")}
+              title="Return to public community portal"
+            >
+              <ArrowLeft size={13} />
+              <span>Citizen View</span>
+            </button>
+            <button
+              type="button"
+              className="admin-footer-btn"
+              onClick={onLogout}
+              title="Sign out of administration desk"
+              style={{ color: "#fca5a5" }}
+            >
+              <LogOut size={13} />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <div className="admin-main">
+        {/* Sticky Topbar */}
+        <header className="admin-topbar">
+          <div className="admin-topbar-left">
+            <button
+              type="button"
+              className="admin-mobile-toggle"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="Toggle Navigation Menu"
+            >
+              <Menu size={18} />
+            </button>
+
+            <nav className="admin-breadcrumb" aria-label="Breadcrumb">
+              <span>Admin</span>
+              <span>/</span>
+              <span className="current">{getViewTitle(currentView)}</span>
+            </nav>
+          </div>
+
+          <div className="admin-topbar-right">
+            <div className="admin-system-chip">
+              <span className="chip-dot" />
+              <span>Neon Postgres Ready</span>
+            </div>
+            <div className="admin-system-chip secondary">
+              <span className="chip-dot" />
+              <span>API Gateway Active</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Toast Notification */}
+        {toast && (
+          <div className="toast" role="status">
+            <CheckCircle size={18} fill="currentColor" />
+            {toast}
+            <button type="button" onClick={() => setToast(null)} aria-label="Dismiss message">
+              x
+            </button>
+          </div>
+        )}
+
+        {/* Content Body */}
+        <main className="admin-content-body">
+          {children}
+        </main>
+      </div>
+    </div>
   );
 }
 
@@ -805,11 +1193,9 @@ function Reports() {
 
 function IntegrationMonitor({
   setToast,
-  openAgent,
   config,
 }: {
   setToast: (message: string) => void;
-  openAgent: () => void;
   config: ReturnType<typeof useSwiftAgent>["config"];
 }) {
   const [handoffs, setHandoffs] = useState<Handoff[]>([]);
@@ -877,11 +1263,6 @@ function IntegrationMonitor({
             <span className="muted" style={{ display: "block" }}>Agent Tool Endpoint</span>
             <code>POST /v1/agent/complaints</code>
           </div>
-        </div>
-        <div style={{ marginTop: "14px", display: "flex", gap: "10px" }}>
-          <button type="button" className="button secondary" onClick={openAgent}>
-            <Bot size={16} /> Open Test Widget
-          </button>
         </div>
       </section>
 

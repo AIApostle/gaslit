@@ -57,6 +57,10 @@ class SwiftAgentComplaintInput(BaseModel):
     priority: str = Field(default="normal", pattern="^(low|normal|high|critical)$")
 
 
+class StaffLoginRequest(BaseModel):
+    key: str = Field(min_length=1)
+
+
 class SwiftAgentToolResponse(BaseModel):
     ticket_id: str
     status: str

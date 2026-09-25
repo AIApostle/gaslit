@@ -35,6 +35,10 @@ def complaint_payload() -> dict[str, str]:
 
 def test_public_intake_status_and_staff_lifecycle(tmp_path: Path) -> None:
     with app_client(tmp_path) as client:
+        health_res = client.get("/health")
+        assert health_res.status_code == 200
+        assert health_res.json()["database"] == "sqlite-ready"
+
         created = client.post("/v1/public/complaints", json=complaint_payload())
         assert created.status_code == 201
         case = created.json()

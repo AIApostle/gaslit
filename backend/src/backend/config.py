@@ -17,7 +17,6 @@ class Settings(BaseSettings):
 
     database_path: str = Field(default="case_management.db", alias="DATABASE_PATH")
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
-    neon_api_key: str | None = Field(default=None, alias="NEON_API_KEY")
 
     # SwiftAgents Integration
     swiftagents_company_id: str = Field(default="e465b6dd-7f97-4fcd-bed2-737555796064", alias="SWIFTAGENTS_COMPANY_ID")
@@ -33,15 +32,18 @@ class Settings(BaseSettings):
 
     @property
     def effective_database_url(self) -> str:
-        if (
-            self.database_url
-            and "YOUR_NEON_PASSWORD" not in self.database_url
-            and "ep-xxxx-pooler" not in self.database_url
-            and "your_neon_password" not in self.database_url.lower()
-            and "placeholder" not in self.database_url.lower()
-        ):
+        if self.database_url:
+            # If explicit sqlite url provided, normalize driver
+            if self.database_url.startswith("sqlite"):
+                if self.database_url.startswith("sqlite:///") and not self.database_url.startswith("sqlite+aiosqlite:///"):
+                    return self.database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+                return self.database_url
+            # If leftover Neon/Postgres connection string, fallback to SQLite
+            if "neon" in self.database_url.lower() or "postgres" in self.database_url.lower():
+                return f"sqlite+aiosqlite:///{self.database_path}"
             return self.database_url
         return f"sqlite+aiosqlite:///{self.database_path}"
 
 
 settings = Settings()
+

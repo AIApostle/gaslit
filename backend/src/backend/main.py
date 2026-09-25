@@ -161,7 +161,9 @@ def verify_staff(payload: StaffLoginRequest) -> dict[str, Any]:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "service": "case-management-api", "database": "neon-postgres-ready"}
+    db_type = "sqlite" if "sqlite" in settings.effective_database_url else "postgres"
+    return {"status": "ok", "service": "case-management-api", "database": f"{db_type}-ready"}
+
 
 
 @app.get("/v1/integrations/swiftagents/config")

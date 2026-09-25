@@ -1,14 +1,14 @@
 import asyncio
 from collections.abc import AsyncGenerator
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from .config import settings
 from .models import Base
@@ -18,13 +18,15 @@ _session_maker: async_sessionmaker[AsyncSession] | None = None
 
 
 def sanitize_database_url(url: str) -> tuple[str, dict]:
-    """
-    Sanitize database connection URLs for asyncpg:
-    1. Normalizes postgres/postgresql prefixes to postgresql+asyncpg://
-    2. Strips 'sslmode' query parameter (asyncpg does not accept sslmode and raises TypeError)
-    3. Injects connect_args['ssl'] = True for Neon and SSL-enabled connections
-    """
+    """Sanitize database connection URLs and configure driver connection arguments."""
     connect_args: dict = {}
+
+    if url.startswith("sqlite"):
+        if url.startswith("sqlite:///") and not url.startswith("sqlite+aiosqlite:///"):
+            url = url.replace("sqlite:///", "sqlite+aiosqlite:///")
+        connect_args["check_same_thread"] = False
+        connect_args["timeout"] = 30
+        return url, connect_args
 
     if url.startswith("postgres://"):
         url = "postgresql+asyncpg://" + url[len("postgres://"):]
@@ -34,13 +36,8 @@ def sanitize_database_url(url: str) -> tuple[str, dict]:
     if "postgresql" in url:
         parsed = urlsplit(url)
         query_params = dict(parse_qsl(parsed.query))
-
-        sslmode = query_params.pop("sslmode", None)
-        ssl_param = query_params.pop("ssl", None)
-
-        if "neon.tech" in url or sslmode in ("require", "verify-ca", "verify-full") or ssl_param:
-            connect_args["ssl"] = True
-
+        query_params.pop("sslmode", None)
+        query_params.pop("ssl", None)
         new_query = urlencode(query_params)
         clean_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, new_query, parsed.fragment))
         return clean_url, connect_args
@@ -60,6 +57,16 @@ def get_engine() -> AsyncEngine:
             pool_pre_ping=True,
             echo=False,
         )
+
+        if "sqlite" in clean_url:
+            @event.listens_for(_engine.sync_engine, "connect")
+            def set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA foreign_keys=ON")
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA busy_timeout=5000")
+                cursor.close()
+
     return _engine
 
 
@@ -89,33 +96,9 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db_async() -> None:
-    global _engine, _session_maker
     engine = get_engine()
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
-    except Exception as exc:
-        # If external database (e.g. Neon) is unreachable or DNS lookup fails,
-        # fail over to local SQLite so Render / FastAPI starts up cleanly without crashing
-        if "sqlite" not in str(engine.url):
-            import logging
-            logging.getLogger("uvicorn.error").warning(
-                "Primary database connection failed on startup (%s: %s). Falling back to local SQLite to keep server operational.",
-                type(exc).__name__,
-                exc,
-            )
-            fallback_url = f"sqlite+aiosqlite:///{settings.database_path}"
-            _engine = create_async_engine(fallback_url, pool_pre_ping=True, echo=False)
-            _session_maker = async_sessionmaker(
-                bind=_engine,
-                class_=AsyncSession,
-                expire_on_commit=False,
-                autoflush=False,
-            )
-            async with _engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-        else:
-            raise
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 
 def initialize_database() -> None:

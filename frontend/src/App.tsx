@@ -543,7 +543,7 @@ function AdminLayout({
             </div>
             <div className="admin-user-info">
               <strong>Liaison Officer</strong>
-              <small>Neon DB Connected</small>
+              <small>SQLite DB Connected</small>
             </div>
           </div>
 
@@ -595,7 +595,7 @@ function AdminLayout({
           <div className="admin-topbar-right">
             <div className="admin-system-chip">
               <span className="chip-dot" />
-              <span>Neon Postgres Ready</span>
+              <span>SQLite DB Ready</span>
             </div>
             <div className="admin-system-chip secondary">
               <span className="chip-dot" />
@@ -1326,7 +1326,7 @@ function Settings({
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <strong style={{ fontSize: "14px", display: "block" }}>Database Engine</strong>
-                  <span className="muted" style={{ fontSize: "12px" }}>Neon Serverless PostgreSQL (asyncpg connection pooler)</span>
+                  <span className="muted" style={{ fontSize: "12px" }}>SQLite Embedded Database (async WAL mode)</span>
                 </div>
                 <span className="badge ready" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
                   <CheckCircle size={12} /> Configured

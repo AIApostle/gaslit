@@ -2,7 +2,7 @@
 
 ## Core Focus
 * **Primary Intake Engine**: SwiftAgents in-browser AI conversational agent (`https://widget.swiftagents.org`).
-* **Database**: Neon Serverless PostgreSQL with SQLAlchemy async ORM (with local dev fallback).
+* **Database**: SQLite with SQLAlchemy async ORM (`aiosqlite`) for zero-setup, local and lightweight server persistence.
 * **UI**: Preserve the established workspace layout, brand identity, and clean ergonomics while elevating design taste and adding SwiftAgents triggers and monitoring views.
 
 ## Architecture

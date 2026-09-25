@@ -199,11 +199,24 @@ def test_swiftagents_agent_intake_and_webhook(tmp_path: Path) -> None:
         # Tools catalog endpoint
         tools_res = client.get("/v1/agent/tools.json")
         assert tools_res.status_code == 200
-        tools = tools_res.json()["tools"]
+        tools_data = tools_res.json()
+        assert tools_data["documentation_url"].endswith("/v1/agent/documentation")
+        assert tools_data["manual_url"].endswith("/llms.txt")
+        tools = tools_data["tools"]
         assert len(tools) == 4
         tool_names = [t["name"] for t in tools]
         assert "submit_complaint" in tool_names
         assert "lookup_case" in tool_names
         assert "attach_evidence" in tool_names
         assert "request_human_handoff" in tool_names
+
+        # Agent documentation manual and llms.txt
+        doc_res = client.get("/v1/agent/documentation")
+        assert doc_res.status_code == 200
+        assert "Outloud — AI Agent Operational Manual" in doc_res.text
+
+        llms_res = client.get("/llms.txt")
+        assert llms_res.status_code == 200
+        assert "Outloud — AI Agent Operational Manual" in llms_res.text
+
 

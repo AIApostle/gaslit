@@ -4,13 +4,14 @@ from contextlib import asynccontextmanager
 import logging
 from typing import Any
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
 from .database import close_database, get_session, init_db_async
+from .manual import AGENT_DOCUMENTATION_MARKDOWN
 from .schemas import (
     CaseAssignment,
     CaseDetail,
@@ -182,7 +183,26 @@ def swiftagents_widget_config() -> dict[str, Any]:
 
 @app.get("/", include_in_schema=False)
 def home() -> dict[str, str]:
-    return {"status": "online", "docs": "/docs", "service": "Host Community Case Management"}
+    return {
+        "status": "online",
+        "docs": "/docs",
+        "agent_manual": "/v1/agent/documentation",
+        "llms_txt": "/llms.txt",
+        "tools": "/v1/agent/tools.json",
+        "service": "Outloud Host Community Case Management",
+    }
+
+
+@app.get("/v1/agent/documentation", response_class=Response, include_in_schema=True)
+def get_agent_documentation() -> Response:
+    """Returns the complete operational manual and API integration guide for AI agents."""
+    return Response(content=AGENT_DOCUMENTATION_MARKDOWN, media_type="text/markdown; charset=utf-8")
+
+
+@app.get("/llms.txt", response_class=Response, include_in_schema=False)
+def get_llms_txt() -> Response:
+    """Standard AI agent documentation file for LLMs discovering this service."""
+    return Response(content=AGENT_DOCUMENTATION_MARKDOWN, media_type="text/plain; charset=utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -262,6 +282,9 @@ def get_swiftagents_tool_catalog(request: Request) -> dict[str, Any]:
         "description": "Outloud AI Agent Tool Suite",
         "server_url": base_url,
         "catalog_url": f"{base_url}/v1/agent/tools.json",
+        "documentation_url": f"{base_url}/v1/agent/documentation",
+        "manual_url": f"{base_url}/llms.txt",
+        "instructions": "Follow the operational manual at /v1/agent/documentation to conduct conversational intake and invoke submit_complaint with extracted parameters.",
         "webhook_url": f"{base_url}/v1/agent/webhook",
         "openapi_url": f"{base_url}/openapi.json",
         "tools": [

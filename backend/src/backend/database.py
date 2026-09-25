@@ -100,6 +100,13 @@ async def init_db_async() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
+    if settings.auto_seed:
+        from .seed import seed_database_if_empty
+        maker = get_session_maker()
+        async with maker() as session:
+            await seed_database_if_empty(session)
+
+
 
 def initialize_database() -> None:
     """Synchronous bridge to initialize tables at app startup or in tests."""

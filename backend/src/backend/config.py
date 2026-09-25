@@ -17,6 +17,7 @@ class Settings(BaseSettings):
 
     database_path: str = Field(default="case_management.db", alias="DATABASE_PATH")
     database_url: str | None = Field(default=None, alias="DATABASE_URL")
+    auto_seed: bool = Field(default=True, alias="AUTO_SEED")
 
     # SwiftAgents Integration
     swiftagents_company_id: str = Field(default="e465b6dd-7f97-4fcd-bed2-737555796064", alias="SWIFTAGENTS_COMPANY_ID")
@@ -31,6 +32,13 @@ class Settings(BaseSettings):
     staff_key: str | None = Field(default="123456", alias="STAFF_API_KEY")
 
     @property
+    def resolved_database_path(self) -> Path:
+        p = Path(self.database_path)
+        if not p.is_absolute():
+            return (Path(__file__).resolve().parents[2] / p).resolve()
+        return p.resolve()
+
+    @property
     def effective_database_url(self) -> str:
         if self.database_url:
             # If explicit sqlite url provided, normalize driver
@@ -40,9 +48,9 @@ class Settings(BaseSettings):
                 return self.database_url
             # If leftover Neon/Postgres connection string, fallback to SQLite
             if "neon" in self.database_url.lower() or "postgres" in self.database_url.lower():
-                return f"sqlite+aiosqlite:///{self.database_path}"
+                return f"sqlite+aiosqlite:///{self.resolved_database_path}"
             return self.database_url
-        return f"sqlite+aiosqlite:///{self.database_path}"
+        return f"sqlite+aiosqlite:///{self.resolved_database_path}"
 
 
 settings = Settings()

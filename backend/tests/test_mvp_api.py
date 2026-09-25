@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 def app_client(tmp_path: Path) -> TestClient:
     os.environ["DATABASE_PATH"] = str(tmp_path / "cases.db")
+    os.environ["AUTO_SEED"] = "false"
     import backend.config as config
     import backend.database as database
     import backend.main as main

@@ -18,15 +18,20 @@ import type {
 } from "./types";
 
 const PRODUCTION_API_URL = "https://gaslit.onrender.com";
+
+const isLocalhost =
+  typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1");
+
+const rawEnvUrl = (import.meta.env.VITE_API_BASE_URL || "").trim();
+
 const CONFIGURED_API_BASE = (
-  import.meta.env.VITE_API_BASE_URL ||
-  (typeof window !== "undefined" &&
-  (window.location.origin.includes("gaslit.onrender.com") ||
-    window.location.hostname === "localhost" ||
-    window.location.hostname === "127.0.0.1")
-    ? ""
-    : PRODUCTION_API_URL)
+  isLocalhost
+    ? (rawEnvUrl.includes("localhost") || rawEnvUrl.includes("127.0.0.1") ? rawEnvUrl : "")
+    : (rawEnvUrl || (typeof window !== "undefined" && window.location.origin.includes("gaslit.onrender.com") ? "" : PRODUCTION_API_URL))
 ).replace(/\/$/, "");
+
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {

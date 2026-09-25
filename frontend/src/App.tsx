@@ -49,10 +49,8 @@ import {
   getAgentToolsCatalog,
   getStaffKey,
   listCases,
-  listHandoffs,
   listNotifications,
   lookupStatus,
-  retryHandoff,
   retryNotification,
   setStaffKey,
   transitionCase,
@@ -65,7 +63,6 @@ import type {
   CaseSummary,
   CaseWithTimeline,
   Evidence,
-  Handoff,
   InvestigationNote,
   NotificationEvent,
   PortfolioReport,
@@ -73,7 +70,7 @@ import type {
   SwiftAgentToolResponse,
 } from "./types";
 
-type View = "portal" | "workspace" | "reports" | "integration" | "settings";
+type View = "portal" | "workspace" | "reports" | "settings";
 
 const stageOptions: { value: CaseStage; label: string }[] = [
   { value: "reported", label: "Reported" },
@@ -104,7 +101,6 @@ function getInitialView(): View {
   const hash = window.location.hash.toLowerCase();
   if (path.startsWith("/admin") || hash.startsWith("#/admin")) {
     if (path.includes("reports") || hash.includes("reports")) return "reports";
-    if (path.includes("integration") || hash.includes("integration")) return "integration";
     if (path.includes("settings") || hash.includes("settings")) return "settings";
     return "workspace";
   }
@@ -200,7 +196,6 @@ export function App() {
       >
         {view === "workspace" && <Workspace setToast={setToast} />}
         {view === "reports" && <Reports />}
-        {view === "integration" && <IntegrationMonitor setToast={setToast} config={config} />}
         {view === "settings" && <Settings setToast={setToast} config={config} />}
       </AdminLayout>
     );
@@ -429,13 +424,16 @@ function AdminLayout({
         return "Case Management Desk";
       case "reports":
         return "Analytics & SLA Reports";
-      case "integration":
-        return "SwiftAgents Live Hub";
       case "settings":
-        return "System Status & Database";
+        return "System Status & Environment";
       default:
         return titleCase(v);
     }
+  };
+
+  const handleNav = (v: View) => {
+    onNavigate(v);
+    setSidebarOpen(false);
   };
 
   return (
@@ -455,7 +453,7 @@ function AdminLayout({
           <button
             className="admin-sidebar-brand"
             type="button"
-            onClick={() => onNavigate("workspace")}
+            onClick={() => handleNav("workspace")}
             title="Outloud Operations"
           >
             <span className="brand-mark">
@@ -469,6 +467,14 @@ function AdminLayout({
               </small>
             </span>
           </button>
+          <button
+            type="button"
+            className="admin-sidebar-close"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close navigation menu"
+          >
+            <X size={18} />
+          </button>
         </div>
 
         <div className="admin-sidebar-body">
@@ -478,7 +484,7 @@ function AdminLayout({
               type="button"
               className="admin-nav-item"
               aria-selected={currentView === "workspace"}
-              onClick={() => onNavigate("workspace")}
+              onClick={() => handleNav("workspace")}
             >
               <div className="admin-nav-item-left">
                 <BriefcaseBusiness size={17} />
@@ -493,7 +499,7 @@ function AdminLayout({
               type="button"
               className="admin-nav-item"
               aria-selected={currentView === "reports"}
-              onClick={() => onNavigate("reports")}
+              onClick={() => handleNav("reports")}
             >
               <div className="admin-nav-item-left">
                 <BarChart3 size={17} />
@@ -503,28 +509,12 @@ function AdminLayout({
           </div>
 
           <div className="admin-nav-group">
-            <div className="admin-nav-label">AI & Automation</div>
-            <button
-              type="button"
-              className="admin-nav-item"
-              aria-selected={currentView === "integration"}
-              onClick={() => onNavigate("integration")}
-            >
-              <div className="admin-nav-item-left">
-                <Bot size={17} />
-                <span>SwiftAgents Hub</span>
-              </div>
-              <span className="admin-nav-pill">Live</span>
-            </button>
-          </div>
-
-          <div className="admin-nav-group">
             <div className="admin-nav-label">Infrastructure</div>
             <button
               type="button"
               className="admin-nav-item"
               aria-selected={currentView === "settings"}
-              onClick={() => onNavigate("settings")}
+              onClick={() => handleNav("settings")}
             >
               <div className="admin-nav-item-left">
                 <ShieldCheck size={17} />
@@ -543,7 +533,7 @@ function AdminLayout({
             </div>
             <div className="admin-user-info">
               <strong>Liaison Officer</strong>
-              <small>SQLite DB Connected</small>
+              <small>System Online</small>
             </div>
           </div>
 
@@ -595,11 +585,11 @@ function AdminLayout({
           <div className="admin-topbar-right">
             <div className="admin-system-chip">
               <span className="chip-dot" />
-              <span>SQLite DB Ready</span>
+              <span>System Operational</span>
             </div>
             <div className="admin-system-chip secondary">
               <span className="chip-dot" />
-              <span>API Gateway Active</span>
+              <span>Gateway Active</span>
             </div>
           </div>
         </header>
@@ -845,8 +835,8 @@ function Workspace({ setToast }: { setToast: (message: string) => void }) {
           </div>
         ))}
       </div>
-      <div className="workspace-grid">
-        <section className="panel">
+      <div className={`workspace-grid ${selectedId ? "mobile-has-selection" : ""}`}>
+        <section className={`panel ${selectedId ? "mobile-hide-on-select" : ""}`}>
           <div className="panel-head">
             <h2>Grievance Queue</h2>
             <div className="filters">
@@ -913,6 +903,10 @@ function Workspace({ setToast }: { setToast: (message: string) => void }) {
           notes={notes}
           evidence={evidence}
           notifications={notifications}
+          onClose={() => {
+            setSelectedId(null);
+            setSelected(null);
+          }}
           reload={async () => {
             if (selectedId) await loadSelected(selectedId);
             await refreshCases();
@@ -929,6 +923,7 @@ function CaseDetailPanel({
   notes,
   evidence,
   notifications,
+  onClose,
   reload,
   setToast,
 }: {
@@ -936,6 +931,7 @@ function CaseDetailPanel({
   notes: InvestigationNote[];
   evidence: Evidence[];
   notifications: NotificationEvent[];
+  onClose: () => void;
   reload: () => Promise<void>;
   setToast: (message: string) => void;
 }) {
@@ -946,7 +942,7 @@ function CaseDetailPanel({
 
   if (!selected) {
     return (
-      <aside className="panel detail-panel">
+      <aside className="panel detail-panel empty-detail-panel">
         <EmptyState title="Select a case" copy="Select an item from the queue to inspect grievance facts, timeline, evidence, and actions." />
       </aside>
     );
@@ -1008,6 +1004,16 @@ function CaseDetailPanel({
 
   return (
     <aside className="panel detail-panel">
+      <div className="mobile-detail-header-action">
+        <button
+          type="button"
+          className="button ghost mobile-back-btn"
+          onClick={onClose}
+        >
+          <ArrowLeft size={16} /> Back to Grievance Queue
+        </button>
+      </div>
+
       <div className="detail-hero">
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
@@ -1191,88 +1197,7 @@ function Reports() {
   );
 }
 
-function IntegrationMonitor({
-  setToast,
-  config,
-}: {
-  setToast: (message: string) => void;
-  config: ReturnType<typeof useSwiftAgent>["config"];
-}) {
-  const [handoffs, setHandoffs] = useState<Handoff[]>([]);
-  const [notifications, setNotifications] = useState<NotificationEvent[]>([]);
-  const [error, setError] = useState<string | null>(null);
 
-  async function load() {
-    setError(null);
-    try {
-      const [handoffData, notificationData] = await Promise.all([listHandoffs(), listNotifications()]);
-      setHandoffs(handoffData);
-      setNotifications(notificationData);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not load integration events");
-    }
-  }
-
-  useEffect(() => {
-    load();
-  }, []);
-
-  async function retry(type: "handoff" | "notification", id: string) {
-    if (type === "handoff") await retryHandoff(id);
-    else await retryNotification(id);
-    setToast("Retry recorded");
-    await load();
-  }
-
-  return (
-    <section className="view-stack">
-      <PageHeader
-        kicker="Reliability"
-        title="SwiftAgents Integration Hub"
-        copy="Real-time monitoring of SwiftAgents conversational handoffs, webhooks, and outbound notification events."
-        action={
-          <button className="button ghost" type="button" onClick={load}>
-            <RefreshCw />Refresh
-          </button>
-        }
-      />
-      {error && <Notice tone="danger">{error}</Notice>}
-
-      <section className="panel" style={{ padding: "18px 22px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <Bot size={22} color="#11685f" />
-            <h3 style={{ margin: 0 }}>SwiftAgents Runtime Status</h3>
-          </div>
-          <span className="ai-pill">{config?.mock_mode ? "Mock Sandbox Mode" : "Live Cloud Active"}</span>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px", fontSize: "13px" }}>
-          <div>
-            <span className="muted" style={{ display: "block" }}>Company ID</span>
-            <code>{config?.company_id ?? "Not configured"}</code>
-          </div>
-          <div>
-            <span className="muted" style={{ display: "block" }}>Public Widget Key</span>
-            <code>{config?.public_key ? `${config.public_key.slice(0, 12)}...` : "None"}</code>
-          </div>
-          <div>
-            <span className="muted" style={{ display: "block" }}>Widget CDN URL</span>
-            <span style={{ color: "var(--accent)" }}>widget.swiftagents.org</span>
-          </div>
-          <div>
-            <span className="muted" style={{ display: "block" }}>Agent Tool Endpoint</span>
-            <code>POST /v1/agent/complaints</code>
-          </div>
-        </div>
-      </section>
-
-      <div className="two-column">
-        <EventPanel title="SwiftAgents Handoffs" rows={handoffs} type="handoff" retry={retry} />
-        <EventPanel title="Notification Events" rows={notifications} type="notification" retry={retry} />
-      </div>
-    </section>
-  );
-}
 
 function Settings({
   setToast,
@@ -1325,11 +1250,11 @@ function Settings({
             <div className="summary-card" style={{ padding: "14px 16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <strong style={{ fontSize: "14px", display: "block" }}>Database Engine</strong>
-                  <span className="muted" style={{ fontSize: "12px" }}>SQLite Embedded Database (async WAL mode)</span>
+                  <strong style={{ fontSize: "14px", display: "block" }}>System of Record</strong>
+                  <span className="muted" style={{ fontSize: "12px" }}>Encrypted Audit Ledger & Persistent Storage</span>
                 </div>
                 <span className="badge ready" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                  <CheckCircle size={12} /> Configured
+                  <CheckCircle size={12} /> Operational
                 </span>
               </div>
             </div>
@@ -1337,8 +1262,8 @@ function Settings({
             <div className="summary-card" style={{ padding: "14px 16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <strong style={{ fontSize: "14px", display: "block" }}>Intake Engine</strong>
-                  <span className="muted" style={{ fontSize: "12px" }}>SwiftAgents Autonomous Assistant ({config?.mock_mode ? "Local Dev Mock" : "Production Cloud CDN"})</span>
+                  <strong style={{ fontSize: "14px", display: "block" }}>Conversational Intake</strong>
+                  <span className="muted" style={{ fontSize: "12px" }}>Autonomous Assistant Service ({config?.mock_mode ? "Sandbox Environment" : "Production Engine"})</span>
                 </div>
                 <span className="badge active" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
                   <Bot size={12} /> Active
@@ -1349,11 +1274,11 @@ function Settings({
             <div className="summary-card" style={{ padding: "14px 16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <strong style={{ fontSize: "14px", display: "block" }}>Staff Authorization</strong>
-                  <span className="muted" style={{ fontSize: "12px" }}>Managed server-side via STAFF_API_KEY environment variable</span>
+                  <strong style={{ fontSize: "14px", display: "block" }}>Access Control & Auth</strong>
+                  <span className="muted" style={{ fontSize: "12px" }}>Verified Token-Based Role Authorization</span>
                 </div>
                 <span className="badge in_review" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                  <Lock size={12} /> Programmatic
+                  <Lock size={12} /> Enforced
                 </span>
               </div>
             </div>
@@ -1449,46 +1374,7 @@ function ReportSection({ title, counts }: { title: string; counts: Record<string
   );
 }
 
-function EventPanel<T extends Handoff | NotificationEvent>({
-  title,
-  rows,
-  type,
-  retry,
-}: {
-  title: string;
-  rows: T[];
-  type: "handoff" | "notification";
-  retry: (type: "handoff" | "notification", id: string) => Promise<void>;
-}) {
-  return (
-    <section className="panel event-panel">
-      <div className="panel-head">
-        <h3>{title}</h3>
-        <span className="count-pill">{rows.length}</span>
-      </div>
-      {rows.length === 0 && <EmptyState title="No events" copy="No external delivery attempts recorded yet." />}
-      <ul className="event-list">
-        {rows.map((row) => (
-          <li className="event-row" key={row.id}>
-            <div>
-              <strong>{titleCase(row.event_type)}</strong>
-              <small>{formatDate(row.created_at)}</small>
-              {"channel" in row && <small>{row.channel}: {row.recipient}</small>}
-              {"message" in row && <p className="event-message">{row.message}</p>}
-              {row.error_message && <p className="error-copy">{row.error_message}</p>}
-            </div>
-            <div className="event-actions">
-              <Badge value={row.status} />
-              <button className="button ghost small" type="button" onClick={() => retry(type, row.id)}>
-                Retry
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
+
 
 function Badge({ value }: { value: string }) {
   return <span className={`badge ${value}`}>{titleCase(value)}</span>;

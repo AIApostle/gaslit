@@ -46,7 +46,6 @@ import {
   getEvidence,
   getNotes,
   getPortfolioReport,
-  getAgentToolsCatalog,
   getStaffKey,
   listCases,
   listNotifications,
@@ -70,7 +69,7 @@ import type {
   SwiftAgentToolResponse,
 } from "./types";
 
-type View = "portal" | "workspace" | "reports" | "settings";
+type View = "portal" | "workspace" | "reports";
 
 const stageOptions: { value: CaseStage; label: string }[] = [
   { value: "reported", label: "Reported" },
@@ -101,7 +100,6 @@ function getInitialView(): View {
   const hash = window.location.hash.toLowerCase();
   if (path.startsWith("/admin") || hash.startsWith("#/admin")) {
     if (path.includes("reports") || hash.includes("reports")) return "reports";
-    if (path.includes("settings") || hash.includes("settings")) return "settings";
     return "workspace";
   }
   return "portal";
@@ -115,7 +113,7 @@ export function App() {
 
   const isStaffDesk = view !== "portal";
   // SwiftAgents widget is exclusively for public citizen portal, never embedded on admin dashboard
-  const { openAgent, isLoaded, config } = useSwiftAgent(!isStaffDesk);
+  const { openAgent, isLoaded } = useSwiftAgent(!isStaffDesk);
 
   // Sync view with browser URL and history
   useEffect(() => {
@@ -196,7 +194,6 @@ export function App() {
       >
         {view === "workspace" && <Workspace setToast={setToast} />}
         {view === "reports" && <Reports />}
-        {view === "settings" && <Settings setToast={setToast} config={config} />}
       </AdminLayout>
     );
   }
@@ -424,8 +421,6 @@ function AdminLayout({
         return "Case Management Desk";
       case "reports":
         return "Analytics & SLA Reports";
-      case "settings":
-        return "System Status & Environment";
       default:
         return titleCase(v);
     }
@@ -507,36 +502,10 @@ function AdminLayout({
               </div>
             </button>
           </div>
-
-          <div className="admin-nav-group">
-            <div className="admin-nav-label">Infrastructure</div>
-            <button
-              type="button"
-              className="admin-nav-item"
-              aria-selected={currentView === "settings"}
-              onClick={() => handleNav("settings")}
-            >
-              <div className="admin-nav-item-left">
-                <ShieldCheck size={17} />
-                <span>System Status</span>
-              </div>
-            </button>
-          </div>
         </div>
 
-        {/* Sidebar Footer with Officer Profile and Sign Out */}
+        {/* Sidebar Footer with Citizen View and Sign Out */}
         <div className="admin-sidebar-footer">
-          <div className="admin-user-card">
-            <div className="admin-user-avatar">
-              <CircleUserRound size={18} />
-              <span className="admin-status-dot-active" title="Authenticated & Active" />
-            </div>
-            <div className="admin-user-info">
-              <strong>Liaison Officer</strong>
-              <small>System Online</small>
-            </div>
-          </div>
-
           <div className="admin-footer-actions">
             <button
               type="button"
@@ -580,17 +549,6 @@ function AdminLayout({
               <span>/</span>
               <span className="current">{getViewTitle(currentView)}</span>
             </nav>
-          </div>
-
-          <div className="admin-topbar-right">
-            <div className="admin-system-chip">
-              <span className="chip-dot" />
-              <span>System Operational</span>
-            </div>
-            <div className="admin-system-chip secondary">
-              <span className="chip-dot" />
-              <span>Gateway Active</span>
-            </div>
           </div>
         </header>
 
@@ -1198,112 +1156,6 @@ function Reports() {
 }
 
 
-
-function Settings({
-  setToast,
-  config,
-}: {
-  setToast: (message: string) => void;
-  config: ReturnType<typeof useSwiftAgent>["config"];
-}) {
-  const [latency, setLatency] = useState<number | null>(null);
-  const [checking, setChecking] = useState(false);
-
-  async function checkHealth() {
-    setChecking(true);
-    const start = performance.now();
-    try {
-      await getAgentToolsCatalog();
-    } catch {
-      // fallback in case of network issue
-    }
-    const end = performance.now();
-    setLatency(Math.round(end - start));
-    setChecking(false);
-    setToast("API connectivity verified");
-  }
-
-  return (
-    <section className="view-stack">
-      <PageHeader
-        kicker="Architecture & Environment"
-        title="System Status & Configuration"
-        copy="All infrastructure credentials and access policies are configured programmatically via secure server environment variables."
-        action={
-          <button className="button secondary" type="button" onClick={checkHealth} disabled={checking}>
-            <Activity size={16} />
-            {checking ? "Checking..." : latency !== null ? `Live Latency: ${latency}ms` : "Test Connection"}
-          </button>
-        }
-      />
-      <div className="two-column">
-        <section className="panel" style={{ padding: "24px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
-            <ShieldCheck size={22} color="var(--primary)" />
-            <h3 style={{ margin: 0 }}>Programmatic Runtime Configuration</h3>
-          </div>
-          <p style={{ fontSize: "14px", color: "var(--muted)", lineHeight: 1.6, marginBottom: "20px" }}>
-            Per platform security standards, operational secrets and API keys are injected at deployment time into the server environment rather than exposed or managed in client-side forms.
-          </p>
-
-          <div style={{ display: "grid", gap: "14px" }}>
-            <div className="summary-card" style={{ padding: "14px 16px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <strong style={{ fontSize: "14px", display: "block" }}>System of Record</strong>
-                  <span className="muted" style={{ fontSize: "12px" }}>Encrypted Audit Ledger & Persistent Storage</span>
-                </div>
-                <span className="badge ready" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                  <CheckCircle size={12} /> Operational
-                </span>
-              </div>
-            </div>
-
-            <div className="summary-card" style={{ padding: "14px 16px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <strong style={{ fontSize: "14px", display: "block" }}>Conversational Intake</strong>
-                  <span className="muted" style={{ fontSize: "12px" }}>Autonomous Assistant Service ({config?.mock_mode ? "Sandbox Environment" : "Production Engine"})</span>
-                </div>
-                <span className="badge active" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                  <Bot size={12} /> Active
-                </span>
-              </div>
-            </div>
-
-            <div className="summary-card" style={{ padding: "14px 16px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <strong style={{ fontSize: "14px", display: "block" }}>Access Control & Auth</strong>
-                  <span className="muted" style={{ fontSize: "12px" }}>Verified Token-Based Role Authorization</span>
-                </div>
-                <span className="badge in_review" style={{ display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                  <Lock size={12} /> Enforced
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="panel" style={{ padding: "24px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "16px" }}>
-            <Lock size={22} color="var(--accent)" />
-            <h3 style={{ margin: 0 }}>Security & Zero-Exposure Policy</h3>
-          </div>
-          <p style={{ fontSize: "14px", color: "var(--muted)", lineHeight: 1.6, marginBottom: "16px" }}>
-            The platform follows a zero-trust frontend design:
-          </p>
-          <ul style={{ fontSize: "13px", color: "var(--text)", lineHeight: 1.8, paddingLeft: "20px", margin: 0 }}>
-            <li><strong>Zero Browser Storage:</strong> Secrets and master API credentials are never written to local storage, cookies, or client bundles.</li>
-            <li><strong>Environment Isolation:</strong> Production variables (<code>DATABASE_URL</code>, <code>SWIFTAGENTS_AGENT_KEY</code>, <code>STAFF_API_KEY</code>) are passed securely via Render / hosting environment secrets.</li>
-            <li><strong>Webhook Signature Verification:</strong> SwiftAgents webhooks and tool calls are validated at the API boundary before database execution.</li>
-            <li><strong>Public Citizen Boundary:</strong> The public portal at <code>/</code> is completely stripped of administrative controls and privileged data access.</li>
-          </ul>
-        </section>
-      </div>
-    </section>
-  );
-}
 
 function PageHeader({ kicker, title, copy, action }: { kicker: string; title: string; copy: string; action?: React.ReactNode }) {
   return (
